@@ -1,6 +1,8 @@
-# AI-Based Recruitment Screening and Employee Advisory System
+# AI-Based Candidate Screening, Ranking and Company Policy Question Answering System
+# ระบบคัดกรองและจัดลำดับผู้สมัครงานอัตโนมัติด้วย AI พร้อมระบบตอบคำถามด้านนโยบายและระเบียบองค์กร
 
-ระบบคัดกรองผู้สมัครงานและที่ปรึกษาพนักงานด้วย AI ที่ช่วยลดภาระงาน HR ตั้งแต่การอ่านใบสมัครด้วย DeepSeek OCR คัดกรองและให้คะแนนผู้สมัครด้วย Meta Llama 3 และตอบคำถามนโยบายบริษัทด้วย Typhoon 2 Chatbot ตลอด 24 ชั่วโมง
+ระบบคัดกรองผู้สมัครงานด้วย AI ที่ช่วยลดภาระงาน HR ตั้งแต่การอ่านใบสมัครโดยการคัดกรองผู้สมัครแบบจัด Terilist ด้วย Typhoon OCR
+ระบบตอบคำถามด้านนโยบายบริษัทหรือกฎระเบียบองกรณ์ด้วย Typhoon 2.5 Chatbot ตลอด 24 ชั่วโมง
 
 ---
 
