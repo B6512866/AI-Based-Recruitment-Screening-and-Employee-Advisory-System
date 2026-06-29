@@ -98,6 +98,10 @@ JWT_SECRET=mysecretkey123
 cd backend
 go run main.go
 ```
+> 💡 **หมายเหตุเกี่ยวกับการดาวน์โหลดโมเดล AI:**
+> - ไฟล์โมเดลมีขนาดใหญ่ จึงไม่ได้ถูก commit ขึ้น GitHub 
+> - เมื่อสั่งรันครั้งแรก ระบบจะทำการ **ดาวน์โหลด Weights ของโมเดลจาก Hugging Face ให้อัตโนมัติ** ขอเพียงเครื่องเชื่อมต่ออินเทอร์เน็ต
+> - หากต้องการดาวน์โหลดโมเดลล่วงหน้า สามารถรันสคริปต์: `python typhoon/download_models.py`
 > 💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ
 
 ### 4. รัน Frontend Service (React Vite)
