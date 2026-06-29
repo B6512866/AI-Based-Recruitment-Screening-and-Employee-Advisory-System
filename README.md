@@ -38,14 +38,23 @@
 
 * Canva Presentation
   https://www.canva.com/design/DAHJzGoEurk/ozo62N15eb9iaf3uQIYT1g/edit
+  
+## 🔑 บัญชีเข้าใช้งานสำหรับทดสอบ (Default Accounts)
 
+เมื่อสั่งรันครั้งแรก ระบบจะทำการสร้างข้อมูลเริ่มต้น (Seed Data) ให้อัตโนมัติ สามารถใช้บัญชีด้านล่างเพื่อทดสอบระบบได้ทันที:
+
+| สิทธิ์การใช้งาน (Role) | อีเมล (Email) | รหัสผ่าน (Password) | หน้าเริ่มต้น |
+| ---------------------- | ------------- | -------------------- | ------------ |
+| **HR Manager**         | `hr@gmail.com` | `password123`        | `/hr/dashboard` |
+| **Employee (พนักงาน)**  | `emp@gmail.com`| `password123`        | `/employee/chat` |
 ---
 
 ## สิ่งที่ต้องติดตั้งก่อนเริ่ม
 
-* Docker
-* Go
-* Node.js
+* **Docker & Docker Compose** (สำหรับ PostgreSQL Database)
+* **Go 1.20+** (สำหรับ Backend API)
+* **Node.js 18+ & npm** (สำหรับ Frontend React)
+* **Python 3.10+** (สำหรับ Typhoon AI Engine)
 
 ---
 
@@ -68,9 +77,6 @@ DB_USER=postgres
 DB_PASSWORD=postgres123
 DB_NAME=hr_system
 JWT_SECRET=mysecretkey123
-DEEPSEEK_API_KEY=
-LLAMA_API_KEY=
-TYPHOON_API_KEY=
 ```
 
 ### 2. การใช้งาน Backend
@@ -79,10 +85,9 @@ TYPHOON_API_KEY=
 cd backend
 go run main.go
 ```
+> 💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ
 
-Backend จะ run ที่ `http://localhost:8080`
-
-### 3. Run Frontend
+### 4. รัน Frontend Service (React Vite)
 
 ```bash
 cd frontend
@@ -94,80 +99,41 @@ Frontend จะ run ที่ `http://localhost:5173`
 
 ---
 
-## วิธีลบข้อมูล
+## 📂 Project Resources
 
-1. ทำการหยุดและลบ containers:
-
-```bash
-docker compose down
-```
-
-2. ลบ volume ทิ้ง:
-
-```bash
-docker compose down -v
-```
+* **Google Drive (รวมเอกสารทั้งหมด):** [ลิงก์ไดรฟ์](https://drive.google.com/drive/folders/1e0hGde6mezr3--_qogKZiiOKSeqsBlQV)
+* **Figma Design (UI/UX):** [ลิงก์ Figma](https://www.figma.com/design/V971pjpu3dWQurRk6iDN2J/Capstone-Project?node-id=0-1&p=f)
+* **Draw.io (System Diagram):** [ลิงก์ Diagram](https://app.diagrams.net/#G1i2sgSSXXMStjnNqd5lQICJVYMljOgWD8#%7B%22pageId%22%3A%223Pbtw5pC1sATcA8mYLLV%22%7D)
+* **Canva Presentation:** [ลิงก์ Presentation](https://www.canva.com/design/DAHJzGoEurk/ozo62N15eb9iaf3uQIYT1g/edit)
 
 ---
 
-## การเชื่อมต่อ Database ใน VS Code
+## 🛠️ Tech Stack
 
-ติดตั้ง Extension **PostgreSQL** (Chris Kolkman) แล้วใช้ค่าดังนี้:
-
-| ช่อง            | ค่าที่ใส่           |
-| --------------- | ------------------- |
-| Host            | 127.0.0.1           |
-| PostgreSQL user | postgres            |
-| Password        | postgres123         |
-| Port            | 5432                |
-| Use SSL?        | Standard Connection |
-| Database        | hr_system           |
-
----
-
-## Tech Stack
-
-### Backend
-
-* Go
-* Gin Framework
-* GORM
+### Backend & AI
+* **Go** (Gin Framework, GORM)
+* **Python 3.10** (FastAPI, Transformers, PyTorch)
+* **Typhoon AI** (Typhoon 2.5 & Typhoon OCR)
 
 ### Frontend
+* **React 19** & **TypeScript**
+* **Vite** & **TailwindCSS**
+* **Lucide React** (Icons)
 
-* React
-* TypeScript
-* Vite
-
-### Database
-
-* PostgreSQL 15
-
-### Infrastructure
-
-* Docker
-* Docker Compose
-
-### AI Services
-
-* Typhoon OCR
-* Typhoon 2.5
+### Database & Infrastructure
+* **PostgreSQL 15**
+* **Docker** & **Docker Compose**
 
 ---
 
-## ระบบที่พัฒนา
+## 🧹 การจัดการข้อมูล (Database Maintenance)
 
-### Recruitment Screening Module
+หากต้องการรีเซ็ตหรือลบข้อมูลในฐานข้อมูล:
 
-* อัปโหลด Resume ของผู้สมัคร
-* ดึงข้อมูลอัตโนมัติด้วย Typhoon OCR
-* วิเคราะห์คุณสมบัติผู้สมัครด้วย AI
-* คำนวณคะแนนความเหมาะสมกับตำแหน่งงาน
-* แสดงผลลัพธ์พร้อมเหตุผลประกอบการตัดสินใจ
+```bash
+# หยุดการทำงาน containers
+docker compose down
 
-### Employee Advisory Module
-
-* Chatbot ตอบคำถามนโยบายบริษัท
-* ค้นหาข้อมูลจากเอกสารภายในองค์กร
-* ให้บริการตลอด 24 ชั่วโมง
-* รองรับภาษาไทย
+# ลบข้อมูลใน volume ทั้งหมด (Reset Database)
+docker compose down -v
+```

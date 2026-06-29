@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os/exec"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/middleware"
@@ -10,11 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
+func startTyphoonAI() {
+	go func() {
+		fmt.Println("🤖 Starting Typhoon AI Service on port 8000...")
+		cmd := exec.Command("python", "-m", "uvicorn", "typhoon.main:app", "--host", "0.0.0.0", "--port", "8000")
+		err := cmd.Run()
+		if err != nil {
+			log.Println("⚠️ Typhoon AI process ended or failed:", err)
+		}
+	}()
+}
 
+func main() {
 	config.LoadEnv()
 	config.ConnectDatabase()
 	config.SeedAllData()
+
+	// รัน Typhoon AI ควบคู่ไปด้วยแบบอัตโนมัติ
+	startTyphoonAI()
 
 	r := gin.Default()
 
@@ -27,12 +42,9 @@ func main() {
 
 		// ลงทะเบียน Routes ต่างๆ
 		routes.AuthRoutes(api, config.DB)
-
-		// ในอนาคตคุณสามารถเพิ่ม Routes อื่นๆ ที่นี่เหมือนตัวอย่างได้ เช่น:
-		// routes.CandidateRoutes(api)
-		// routes.ApplicationRoutes(api)
+		routes.KnowledgeRoutes(api, config.DB)
 	}
 
-	fmt.Println(" Server running on port:", config.Env.BackendPort)
+	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)
 	r.Run(":" + config.Env.BackendPort)
 }

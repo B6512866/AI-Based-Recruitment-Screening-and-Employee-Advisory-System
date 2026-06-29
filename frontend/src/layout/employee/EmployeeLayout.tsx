@@ -1,4 +1,5 @@
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
+import logo from "../../assets/logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { employeeMenuItems } from "./employeeMenu";
 import { LogOut, Bell } from "lucide-react";
@@ -24,19 +25,12 @@ export default function EmployeeLayout() {
             {/* Sidebar */}
             <aside className="w-60 bg-white border-r border-slate-100 flex flex-col z-20 shadow-sm">
                 {/* Logo */}
-                <div className="px-6 pt-6 pb-4">
-                    <div className="flex items-center gap-2 mb-8">
-                        <div className="w-8 h-8 bg-gradient-to-tr from-[#6C63FF] to-[#4834d4] rounded-lg flex items-center justify-center shadow shadow-indigo-200">
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
-                        <span className="text-slate-900 font-extrabold text-xl tracking-tight italic">
-                            Hire<span className="text-[#6C63FF]">AI</span>
-                        </span>
-                    </div>
+                <div className="px-6 pt-5 pb-5 border-b border-slate-100">
+                    <img src={logo} alt="HireAI Logo" className="h-14 w-auto object-contain" />
+                </div>
 
-                    {/* Nav items */}
+                {/* Nav items */}
+                <div className="px-4 pt-4 flex-1">
                     <nav className="space-y-0.5">
                         {employeeMenuItems.map((item) => {
                             const Icon = item.icon;

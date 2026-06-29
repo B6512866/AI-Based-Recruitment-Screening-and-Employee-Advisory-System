@@ -1,0 +1,49 @@
+# THANAWAT K.
+FRONTEND DEVELOPER
+
+## CONTACT
+*   thanawat.k@email.com
+*   099-123-4567
+*   Bangkok, Thailand
+*   github.com/thanawatk
+*   linkedin.com/in/thanawatk
+
+## SKILLS
+### FRONTEND
+*   HTML5
+*   CSS3
+*   JavaScript (ES6+)
+*   React.js
+*   Tailwind CSS
+*   Responsive Design
+
+### MICROSOFT STACK
+*   C#
+*   .NET 8 / ASP.NET Core
+*   SQL Server
+*   Azure App Service
+
+### TOOLS
+*   Visual Studio
+*   VS Code
+*   Git / GitHub
+
+## SUMMARY
+Frontend Developer with experience building responsive web applications using React and modern UI technologies. Skilled in working with Microsoft stack including .NET and Azure for web application development and deployment.
+
+## PROJECT EXPERIENCE
+**Recruitment System (Web Application)** Jan 2024 - Apr 2024
+*   Developed responsive user interfaces using React.
+*   Integrated with ASP.NET Core Web API.
+*   Used SQL Server for data storage.
+*   Deployed on Azure App Service.
+
+Tech: React, JavaScript, HTML5, CSS3, .NET 8, SQL Server, Azure
+
+## EDUCATION
+**Bachelor of Science in Computer Science** 2019 - 2023
+Kasetsart University, Bangkok, Thailand
+
+## CERTIFICATIONS
+*   Microsoft Certified: Azure Fundamentals (AZ-900)
+*   Responsive Web Design - freeCodeCamp

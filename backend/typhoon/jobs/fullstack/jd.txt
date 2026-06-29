@@ -1,0 +1,12 @@
+ตำแหน่ง: Full-Stack Developer / Software Engineer
+ความรับผิดชอบ:
+- พัฒนาเว็บแอปพลิเคชันแบบครบวงจร (Frontend และ Backend)
+- ออกแบบ User Interface ที่ใช้งานง่าย และพัฒนาระบบหลังบ้านที่เสถียร
+- เชื่อมต่อ API และจัดการฐานข้อมูลอย่างมีประสิทธิภาพ
+- ทำงานร่วมกับทีมแบบ Agile และดูแลระบบ Deployment (DevOps)
+
+ทักษะที่ต้องการ:
+- Frontend: React, Next.js, HTML/CSS, Tailwind
+- Backend: Python (FastAPI/Django), Node.js หรือ Go
+- Database: PostgreSQL, MongoDB หรือ MySQL
+- อื่นๆ: Git, Docker, CI/CD และความรู้เรื่อง RESTful API

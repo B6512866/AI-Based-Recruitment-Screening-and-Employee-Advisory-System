@@ -1,0 +1,5 @@
+เกณฑ์การคัดเลือก Full-Stack Developer (คะแนนเต็ม 100):
+1. ด้านตรรกะและการแก้ปัญหา (30 คะแนน): พื้นฐาน Programming, Algorithms และ Problem Solving
+2. ทักษะ Full-Stack (40 คะแนน): แบ่งเป็น Frontend (20) และ Backend (20) รวมถึงการเชื่อมต่อ API
+3. Software Engineering (20 คะแนน): การใช้ Git, Docker, แบะระบบ Deployment (CI/CD)
+4. ประสบการณ์และทัศนคติ (10 คะแนน): โปรเจกต์ที่เคยทำ และความสามารถในการเรียนรู้เทคโนโลยีใหม่

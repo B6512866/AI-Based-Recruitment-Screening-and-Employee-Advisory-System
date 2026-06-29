@@ -5,6 +5,8 @@ import {
     Users,
     CalendarCheck,
     FolderOpen,
+    FileSearch,
+    BookOpen,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -22,6 +24,18 @@ export const hrMenuItems: MenuItem[] = [
         path: "/hr/dashboard",
     },
     {
+        id: "screening",
+        label: "คัดกรอง Resume",
+        icon: FileSearch,
+        path: "/hr/screening",
+    },
+    {
+        id: "knowledge",
+        label: "คลังความรู้ (นโยบาย)",
+        icon: BookOpen,
+        path: "/hr/knowledge",
+    },
+    {
         id: "positions",
         label: "ตำแหน่งงาน",
         icon: Briefcase,
@@ -29,7 +43,7 @@ export const hrMenuItems: MenuItem[] = [
     },
     {
         id: "candidates",
-        label: "ผู้สมัคร",
+        label: "โปรไฟล์ผู้สมัคร",
         icon: Users,
         path: "/hr/candidates",
     },
