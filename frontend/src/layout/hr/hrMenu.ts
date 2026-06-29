@@ -1,13 +1,10 @@
 import React from "react";
 import {
     LayoutDashboard,
-    FileSearch,
-    CalendarCheck,
+    Briefcase,
     Users,
-    MessageSquare,
-    BarChart3,
-    FileText,
-    Settings,
+    CalendarCheck,
+    FolderOpen,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -20,50 +17,32 @@ export interface MenuItem {
 export const hrMenuItems: MenuItem[] = [
     {
         id: "dashboard",
-        label: "ภาพรวม",
+        label: "Dashbord",
         icon: LayoutDashboard,
         path: "/hr/dashboard",
     },
     {
-        id: "screening",
-        label: "คัดกรอง Resume",
-        icon: FileSearch,
-        path: "/hr/screening",
-    },
-    {
-        id: "interviews",
-        label: "ตารางสัมภาษณ์",
-        icon: CalendarCheck,
-        path: "/hr/interviews",
+        id: "positions",
+        label: "ตำแหน่งงาน",
+        icon: Briefcase,
+        path: "/hr/positions",
     },
     {
         id: "candidates",
-        label: "ผู้สมัครทั้งหมด",
+        label: "ผู้สมัคร",
         icon: Users,
         path: "/hr/candidates",
     },
     {
-        id: "advisor",
-        label: "HR Advisor",
-        icon: MessageSquare,
-        path: "/hr/advisor",
+        id: "interviews",
+        label: "นัดหมายสัมภาษณ์",
+        icon: CalendarCheck,
+        path: "/hr/interviews",
     },
     {
-        id: "reports",
-        label: "รายงาน",
-        icon: BarChart3,
-        path: "/hr/reports",
-    },
-    {
-        id: "knowledge",
-        label: "คลังความรู้",
-        icon: FileText,
-        path: "/hr/knowledge",
-    },
-    {
-        id: "settings",
-        label: "ตั้งค่า",
-        icon: Settings,
-        path: "/hr/settings",
+        id: "cases",
+        label: "ทะเบียนของกรณี",
+        icon: FolderOpen,
+        path: "/hr/cases",
     },
 ];

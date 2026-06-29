@@ -39,12 +39,12 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
       }
 
       // ใช้ login จาก context
-      login(data.token, data.role);
+      login(data.token, data.role, data.first_name, data.last_name);
 
       onOpenChange(false);
 
-      // Redirect ตาม Role
-      if (data.role === "hr") {
+      // Redirect ตาม Role (Backend ส่งมาเป็น "HRManager" หรือ "Employee")
+      if (data.role === "HRManager") {
         navigate("/hr/dashboard");
       } else {
         navigate("/employee/chat");

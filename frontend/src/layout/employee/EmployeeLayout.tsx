@@ -1,9 +1,9 @@
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { hrMenuItems } from "./hrMenu";
-import { LogOut, Bell, User } from "lucide-react";
+import { employeeMenuItems } from "./employeeMenu";
+import { LogOut, Bell } from "lucide-react";
 
-export default function HRLayout() {
+export default function EmployeeLayout() {
     const { logout, firstName, lastName } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -13,12 +13,11 @@ export default function HRLayout() {
         navigate("/");
     };
 
-    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "HR Admin";
-    const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join("").toUpperCase() || "HR";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Employee";
+    const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join("").toUpperCase() || "E";
 
-    // หา label ของหน้าปัจจุบัน
-    const currentPage = hrMenuItems.find(item => location.pathname.startsWith(item.path));
-    const pageTitle = currentPage?.label || "Dashbord";
+    const currentPage = employeeMenuItems.find(item => location.pathname.startsWith(item.path));
+    const pageTitle = currentPage?.label || "AI Advisor";
 
     return (
         <div className="flex h-screen bg-[#f4f6fb] font-sans">
@@ -39,7 +38,7 @@ export default function HRLayout() {
 
                     {/* Nav items */}
                     <nav className="space-y-0.5">
-                        {hrMenuItems.map((item) => {
+                        {employeeMenuItems.map((item) => {
                             const Icon = item.icon;
                             const isActive = location.pathname.startsWith(item.path);
                             return (
@@ -64,13 +63,15 @@ export default function HRLayout() {
                     </nav>
                 </div>
 
-                {/* Bottom: HR Access + Logout */}
+                {/* Bottom: Employee badge + Logout */}
                 <div className="mt-auto px-6 pb-6 border-t border-slate-100 pt-4">
                     <div className="flex items-center gap-2 px-3 py-2 mb-2">
-                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <User className="w-3.5 h-3.5 text-[#6C63FF]" />
+                        <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
                         </div>
-                        <span className="text-xs font-bold text-slate-400 tracking-wide">HR Access</span>
+                        <span className="text-xs font-bold text-slate-400 tracking-wide">Employee Access</span>
                     </div>
                     <button
                         onClick={handleLogout}
@@ -92,16 +93,15 @@ export default function HRLayout() {
                         {/* Bell */}
                         <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-all border border-slate-100">
                             <Bell className="w-4 h-4" />
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 border border-white rounded-full"></span>
                         </button>
 
                         {/* User */}
                         <div className="flex items-center gap-2.5 pl-4 border-l border-slate-100">
                             <div className="text-right hidden sm:block">
-                                <p className="text-slate-800 text-sm font-bold leading-tight">นาย{fullName}</p>
-                                <p className="text-slate-400 text-[11px]">ทรัพยากรบุคคล</p>
+                                <p className="text-slate-800 text-sm font-bold leading-tight">{fullName}</p>
+                                <p className="text-slate-400 text-[11px]">พนักงาน</p>
                             </div>
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#6C63FF] to-[#4834d4] flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                                 {initials}
                             </div>
                         </div>

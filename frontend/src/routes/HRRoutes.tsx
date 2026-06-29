@@ -2,15 +2,22 @@ import { Routes, Route } from "react-router-dom";
 import HRDashboard from "../layout/hr/Dashboard";
 import HRLayout from "../layout/hr/HRLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
+import PositionsPage from "../page/hr/PositionsPage";
+import CandidatesPage from "../page/hr/CandidatesPage";
+import InterviewsPage from "../page/hr/InterviewsPage";
+import CasesPage from "../page/hr/CasesPage";
 
 export function HRRoutes() {
     return (
-        <ProtectedRoute allowedRoles={["hr"]}>
+        <ProtectedRoute allowedRoles={["HRManager"]}>
             <Routes>
                 <Route element={<HRLayout />}>
                     <Route index element={<HRDashboard />} />
                     <Route path="dashboard" element={<HRDashboard />} />
-                    {/* เพิ่ม Route อื่นๆ เช่น screening, interviews ในอนาคต */}
+                    <Route path="positions" element={<PositionsPage />} />
+                    <Route path="candidates" element={<CandidatesPage />} />
+                    <Route path="interviews" element={<InterviewsPage />} />
+                    <Route path="cases" element={<CasesPage />} />
                     <Route path="*" element={<HRDashboard />} />
                 </Route>
             </Routes>
