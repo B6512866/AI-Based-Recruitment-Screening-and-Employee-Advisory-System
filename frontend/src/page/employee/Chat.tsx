@@ -67,23 +67,29 @@ export default function EmployeeChat() {
         setMessages(prev => [...prev, { id: botId, from: "bot", text: "", streaming: true }]);
 
         try {
-            // ดึงข้อมูลนโยบายบริษัทล่าสุดจาก Database
+            // ดึงข้อมูลนโยบายและเอกสารทั้งหมดใน knowledge_bases จาก Database
             let knowledgeContext = "";
             try {
                 const kRes = await fetch("http://localhost:8080/api/knowledge");
                 const kData = await kRes.json();
-                if (kRes.ok && kData.data && kData.data.length > 0) {
-                    knowledgeContext = "\n\n=== เอกสารนโยบายบริษัท (ข้อมูลอัปเดตจาก Database) ===\n" +
-                        kData.data.map((d: { filename: string; content: string }) => `--- ${d.filename} ---\n${d.content}`).join("\n\n");
+                if (kRes.ok && Array.isArray(kData.data) && kData.data.length > 0) {
+                    knowledgeContext = "\n\n=== คลังความรู้และนโยบายบริษัททั้งหมด (ดึงจาก Database) ===\n" +
+                        kData.data
+                            .map((d: { filename: string; content: string }, index: number) => `[เอกสารที่ ${index + 1}: ${d.filename}]\n${d.content.trim()}`)
+                            .join("\n\n----------------------------------------\n\n");
                 }
             } catch {
                 // Ignore if backend knowledge API fetch fails
             }
 
-            const systemPrompt = `คุณคือ HireAI Advisor ผู้ช่วย HR อัจฉริยะขององค์กร ตอบคำถามพนักงานเกี่ยวกับนโยบาย สวัสดิการ เวลาทำงาน และระเบียบบริษัทอย่างสุภาพ สรุปเข้าใจง่าย และเป็นมิตร
+            const systemPrompt = `คุณคือ HireAI Advisor ผู้ช่วย HR อัจฉริยะขององค์กร มีหน้าที่ตอบคำถามพนักงานเกี่ยวกับนโยบาย สวัสดิการ เวลาทำงาน กฎระเบียบ และคลังความรู้ของบริษัทอย่างถูกต้อง สุภาพ และเป็นมิตร
 
-หากพนักงานขอให้สรุป เช่น "แบบสั้นๆ" ให้สรุปหัวข้อสำคัญออกมาเป็นข้อๆ กระชับ ชัดเจน โดยอ้างอิงเนื้อหาจากเอกสารนโยบายบริษัทต่อไปนี้:
-${knowledgeContext}`;
+จงใช้อ้างอิงข้อมูลจากเอกสารทั้งหมดในคลังความรู้บริษัทด้านล่างนี้ในการตอบคำถาม:
+${knowledgeContext}
+
+คำแนะนำการตอบ:
+- ตอบคำถามให้ตรงประเด็นโดยใช้ข้อมูลจากเอกสารคลังความรู้ด้านบน
+- หากพนักงานขอให้สรุป เช่น "แบบสั้นๆ" ให้สรุปหัวข้อสำคัญออกมาเป็นข้อๆ กระชับ ชัดเจน อ่านง่าย`;
 
             const response = await fetch(`${TYPHOON_API}/chat`, {
                 method: "POST",
