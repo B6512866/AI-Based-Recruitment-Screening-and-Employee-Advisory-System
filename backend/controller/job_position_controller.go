@@ -38,8 +38,6 @@ func (c *JobPositionController) GetByID(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"data": job})
 }
 
-
-
 // POST /api/job-positions
 func (c *JobPositionController) Create(ctx *gin.Context) {
 	var req entity.JobPosition

@@ -2,9 +2,9 @@ package controller
 
 import (
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
-	"net/http"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"net/http"
 )
 
 type ChatController struct {

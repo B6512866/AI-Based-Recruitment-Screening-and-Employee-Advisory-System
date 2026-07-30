@@ -1,0 +1,5 @@
+# Secret keys
+.env
+
+# Uploaded files
+backend/uploads/

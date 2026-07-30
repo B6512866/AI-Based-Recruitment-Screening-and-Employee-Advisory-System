@@ -1,6 +1,9 @@
 package main
 
 import (
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/middleware"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/routes"
 	"fmt"
 	"log"
 	"os"
@@ -8,9 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
-	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/middleware"
-	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/routes"
+	"github.com/joho/godotenv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +30,9 @@ func startTyphoonAI() {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("ไม่พบไฟล์ .env ใช้ Environment Variables จากระบบแทน")
+	}
 	config.LoadEnv()
 	config.ConnectDatabase()
 	config.SeedAllData()
@@ -79,6 +83,8 @@ func main() {
 		routes.KnowledgeRoutes(api, config.DB)
 		routes.JobPositionRoutes(api, config.DB)
 		routes.ChatRoutes(api, config.DB)
+		routes.JobAnnouncementRoutes(api, config.DB)
+		routes.JobCriteriaRoutes(api, config.DB)
 	}
 
 	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)

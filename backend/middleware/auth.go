@@ -1,11 +1,11 @@
 package middleware
 
 import (
-	"net/http"
-	"strings"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"net/http"
+	"strings"
 )
 
 func AuthMiddleware() gin.HandlerFunc {

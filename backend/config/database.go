@@ -38,6 +38,8 @@ func ConnectDatabase() {
 		&entity.ChatMessage{},
 		&entity.Report{},
 		&entity.JobPosition{},
+		&entity.JobAnnouncement{},
+		&entity.JobCriteria{},
 	)
 	if err != nil {
 		panic("AutoMigrate failed: " + err.Error())

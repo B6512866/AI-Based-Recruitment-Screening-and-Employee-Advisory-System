@@ -1,15 +1,15 @@
 package entity
 
 import (
-	"time"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Interview struct {
 	gorm.Model
 
 	InterviewDatetime time.Time `json:"interview_datetime"`
-	DurationMinutes    uint      `json:"duration_minutes" gorm:"default:60"`
+	DurationMinutes   uint      `json:"duration_minutes" gorm:"default:60"`
 
 	// online, onsite หรือ phone
 	Format string `json:"format"`
