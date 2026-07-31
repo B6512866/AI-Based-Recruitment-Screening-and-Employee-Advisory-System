@@ -20,12 +20,18 @@ import (
 )
 
 type JobAnnouncementController struct {
-	db *gorm.DB
+	db            *gorm.DB
+	geminiService *services.GeminiService
 }
 
-func NewJobAnnouncementController(db *gorm.DB) *JobAnnouncementController {
+func NewJobAnnouncementController(
+	db *gorm.DB,
+	geminiService *services.GeminiService,
+) *JobAnnouncementController {
+
 	return &JobAnnouncementController{
-		db: db,
+		db:            db,
+		geminiService: geminiService,
 	}
 }
 
@@ -302,7 +308,9 @@ func (c *JobAnnouncementController) Delete(ctx *gin.Context) {
 		"message": "ลบไฟล์ประกาศงานสำเร็จ",
 	})
 }
-func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
+func (c *JobAnnouncementController) Analyze(
+	ctx *gin.Context,
+) {
 	// รับ ID ของไฟล์ประกาศ
 	announcementID, err := strconv.ParseUint(
 		ctx.Param("announcementId"),
@@ -311,120 +319,182 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 	)
 
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ID ไฟล์ประกาศไม่ถูกต้อง",
-		})
+		ctx.JSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": "ID ประกาศงานไม่ถูกต้อง",
+			},
+		)
 		return
 	}
 
-	// ค้นหาไฟล์ประกาศใน Database
+	// ค้นหาข้อมูลประกาศงาน
 	var announcement entity.JobAnnouncement
 
-	if err := c.db.
-		First(&announcement, uint(announcementID)).
-		Error; err != nil {
+	if err := c.db.First(
+		&announcement,
+		uint(announcementID),
+	).Error; err != nil {
 
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{
+		ctx.JSON(
+			http.StatusNotFound,
+			gin.H{
 				"error": "ไม่พบไฟล์ประกาศงาน",
-			})
-			return
-		}
-
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถค้นหาข้อมูลไฟล์ประกาศได้",
-		})
+			},
+		)
 		return
 	}
 
-	// ตอนนี้รองรับเฉพาะรูปภาพก่อน
-	if announcement.FileType != "jpg" &&
-		announcement.FileType != "jpeg" &&
-		announcement.FileType != "png" {
+	// รองรับเฉพาะรูปภาพ
+	allowedTypes := map[string]bool{
+		"jpg":  true,
+		"jpeg": true,
+		"png":  true,
+	}
 
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ขณะนี้ API วิเคราะห์รองรับ JPG, JPEG และ PNG",
-		})
+	fileType := strings.ToLower(
+		announcement.FileType,
+	)
+
+	if !allowedTypes[fileType] {
+		ctx.JSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": "ขณะนี้ API วิเคราะห์รองรับ JPG, JPEG และ PNG",
+			},
+		)
 		return
 	}
 
-	// อ่านไฟล์จาก Path ที่บันทึกไว้
+	// อ่านไฟล์จาก Server
 	fileData, err := os.ReadFile(
 		announcement.FilePath,
 	)
 
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถอ่านไฟล์จากระบบได้",
-		})
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"error": "ไม่สามารถอ่านไฟล์ประกาศงานได้",
+			},
+		)
 		return
 	}
 
 	// กำหนด MIME Type
-	mimeType := ""
+	mimeType := "image/jpeg"
 
-	switch announcement.FileType {
-	case "jpg", "jpeg":
-		mimeType = "image/jpeg"
-
-	case "png":
+	if fileType == "png" {
 		mimeType = "image/png"
-
-	default:
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ไม่รองรับประเภทไฟล์นี้",
-		})
-		return
 	}
 
-	// สร้าง Gemini Service
-	geminiService, err := services.NewGeminiService()
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// ส่งรูปภาพให้ Gemini วิเคราะห์
-	result, err := geminiService.AnalyzeImage(
+	// วิเคราะห์ด้วย Gemini
+	result, err := c.geminiService.AnalyzeImage(
 		fileData,
 		mimeType,
 	)
 
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"error": err.Error(),
+			},
+		)
 		return
 	}
 
-	// แปลงผลลัพธ์เป็น JSON String
-	resultJSON, err := json.Marshal(result)
+	// แปลงผลลัพธ์ทั้งหมดเป็น JSON
+	resultJSON, err := json.Marshal(
+		result,
+	)
 
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถแปลงผลวิเคราะห์เป็น JSON ได้",
-		})
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"error": "ไม่สามารถแปลงผลการวิเคราะห์เป็น JSON ได้",
+			},
+		)
 		return
 	}
 
-	// บันทึกผลลง Database
-	announcement.GeminiResult = string(resultJSON)
+	// บันทึกผล Gemini ลง JobAnnouncement
+	announcement.GeminiResult = string(
+		resultJSON,
+	)
 
 	announcement.Status = "analyzed"
 
-	if err := c.db.Save(&announcement).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถบันทึกผลการวิเคราะห์ได้",
-		})
+	if err := c.db.Save(
+		&announcement,
+	).Error; err != nil {
+
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"error": "ไม่สามารถบันทึกผลการวิเคราะห์ได้",
+			},
+		)
 		return
 	}
 
-	// ส่งผลกลับไป Frontend / Postman
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Gemini วิเคราะห์ประกาศงานสำเร็จ",
-		"data":    result,
-	})
+	// =================================================
+	// ลบเกณฑ์เก่าของตำแหน่งงาน
+	// =================================================
+
+	if err := c.db.
+		Where(
+			"job_position_id = ?",
+			announcement.JobPositionID,
+		).
+		Delete(
+			&entity.JobCriteria{},
+		).Error; err != nil {
+
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"error": "ไม่สามารถลบเกณฑ์เดิมได้",
+			},
+		)
+		return
+	}
+
+	// =================================================
+	// บันทึก suggested_criteria จาก Gemini
+	// =================================================
+
+	for _, item := range result.SuggestedCriteria {
+
+		criteria := entity.JobCriteria{
+			JobPositionID: announcement.JobPositionID,
+			Name:          item.Name,
+			Description:   item.Description,
+			Weight:        item.Weight,
+			IsRequired:    false,
+		}
+
+		if err := c.db.Create(
+			&criteria,
+		).Error; err != nil {
+
+			ctx.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"error": "ไม่สามารถบันทึกเกณฑ์จาก Gemini ได้",
+				},
+			)
+			return
+		}
+	}
+
+	// ส่งผลลัพธ์กลับไป Frontend
+	ctx.JSON(
+		http.StatusOK,
+		gin.H{
+			"message": "Gemini วิเคราะห์และบันทึกเกณฑ์สำเร็จ",
+			"data":    result,
+		},
+	)
 }

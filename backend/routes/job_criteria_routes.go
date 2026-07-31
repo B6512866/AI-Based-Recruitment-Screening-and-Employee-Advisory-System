@@ -12,33 +12,50 @@ func JobCriteriaRoutes(
 	api *gin.RouterGroup,
 	db *gorm.DB,
 ) {
-	controller := controller.NewJobCriteriaController(
-		db,
-	)
+	jobCriteriaController :=
+		controller.NewJobCriteriaController(db)
 
-	// เกณฑ์ของตำแหน่งงาน
+	// =====================================================
+	// GET เกณฑ์ทั้งหมดของตำแหน่งงาน
+	// GET /api/job-positions/:id/criteria
+	// =====================================================
+
 	api.GET(
 		"/job-positions/:id/criteria",
 		middleware.AuthMiddleware(),
-		controller.GetByJobPositionID,
+		jobCriteriaController.GetByJobPositionID,
 	)
+
+	// =====================================================
+	// เพิ่มเกณฑ์ใหม่
+	// POST /api/job-positions/:id/criteria
+	// =====================================================
 
 	api.POST(
 		"/job-positions/:id/criteria",
 		middleware.AuthMiddleware(),
-		controller.Create,
+		jobCriteriaController.Create,
 	)
 
-	// แก้ไขและลบเกณฑ์
+	// =====================================================
+	// แก้ไขเกณฑ์
+	// PUT /api/job-criteria/:criteriaId
+	// =====================================================
+
 	api.PUT(
 		"/job-criteria/:criteriaId",
 		middleware.AuthMiddleware(),
-		controller.Update,
+		jobCriteriaController.Update,
 	)
+
+	// =====================================================
+	// ลบเกณฑ์
+	// DELETE /api/job-criteria/:criteriaId
+	// =====================================================
 
 	api.DELETE(
 		"/job-criteria/:criteriaId",
 		middleware.AuthMiddleware(),
-		controller.Delete,
+		jobCriteriaController.Delete,
 	)
 }

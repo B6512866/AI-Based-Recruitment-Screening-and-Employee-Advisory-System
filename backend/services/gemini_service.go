@@ -77,6 +77,32 @@ func (s *GeminiService) AnalyzeImage(
 	mimeType string,
 ) (*JobAnalysisResult, error) {
 
+	// ป้องกัน nil pointer
+	if s == nil {
+		return nil, fmt.Errorf(
+			"Gemini Service ยังไม่ได้ถูกสร้าง กรุณาตรวจสอบ GEMINI_API_KEY และการสร้าง GeminiService",
+		)
+	}
+
+	if s.client == nil {
+		return nil, fmt.Errorf(
+			"Gemini Client ยังไม่ได้ถูกสร้าง กรุณาตรวจสอบ GEMINI_API_KEY",
+		)
+	}
+
+	if len(imageData) == 0 {
+		return nil, fmt.Errorf(
+			"ไม่พบข้อมูลรูปภาพสำหรับส่งให้ Gemini วิเคราะห์",
+		)
+	}
+
+	if strings.TrimSpace(mimeType) == "" {
+		return nil, fmt.Errorf(
+			"ไม่พบ MIME Type ของรูปภาพ",
+		)
+	}
+
+	// โค้ดเดิมด้านล่างทำงานต่อได้
 	prompt := `
 คุณเป็นผู้เชี่ยวชาญด้าน HR และการวิเคราะห์ประกาศรับสมัครงาน
 
@@ -105,6 +131,8 @@ func (s *GeminiService) AnalyzeImage(
 
 น้ำหนักรวมของทุกเกณฑ์ต้องเท่ากับ 100
 
+หากข้อมูลบางส่วนไม่มีในประกาศ ให้ใช้ค่าว่าง
+
 รูปแบบชนิดข้อมูลต้องเป็นดังนี้:
 
 - title: string
@@ -122,7 +150,6 @@ func (s *GeminiService) AnalyzeImage(
 - suggested_criteria: array
 
 หากไม่มีข้อมูล:
-
 - ข้อมูลแบบ string ให้ใช้ ""
 - ข้อมูลแบบ array ให้ใช้ []
 
@@ -152,7 +179,9 @@ func (s *GeminiService) AnalyzeImage(
 		context.Background(),
 		s.model,
 		contents,
-		nil,
+		&genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+		},
 	)
 
 	if err != nil {
@@ -162,7 +191,6 @@ func (s *GeminiService) AnalyzeImage(
 		)
 	}
 
-	// รับข้อความจาก Gemini และลบช่องว่างด้านหน้า/ด้านหลัง
 	responseText := strings.TrimSpace(response.Text())
 
 	if responseText == "" {
@@ -171,41 +199,13 @@ func (s *GeminiService) AnalyzeImage(
 		)
 	}
 
-	// Gemini อาจส่ง JSON ใน Markdown code fence
-	// ตัวอย่าง:
-	//
-	// ```json
-	// {
-	//   "title": "Software QA Engineer"
-	// }
-	// ```
-	//
-	// จึงต้องลบ code fence ก่อนแปลง JSON
-
-	responseText = strings.TrimPrefix(
-		responseText,
-		"```json",
-	)
-
-	responseText = strings.TrimPrefix(
-		responseText,
-		"```JSON",
-	)
-
-	responseText = strings.TrimPrefix(
-		responseText,
-		"```",
-	)
-
-	responseText = strings.TrimSuffix(
-		responseText,
-		"```",
-	)
-
-	// ลบช่องว่างและขึ้นบรรทัดใหม่อีกครั้ง
+	// เผื่อ Gemini ส่ง Markdown กลับมา
+	responseText = strings.TrimPrefix(responseText, "```json")
+	responseText = strings.TrimPrefix(responseText, "```JSON")
+	responseText = strings.TrimPrefix(responseText, "```")
+	responseText = strings.TrimSuffix(responseText, "```")
 	responseText = strings.TrimSpace(responseText)
 
-	// แปลง JSON เป็น JobAnalysisResult
 	var result JobAnalysisResult
 
 	if err := json.Unmarshal(

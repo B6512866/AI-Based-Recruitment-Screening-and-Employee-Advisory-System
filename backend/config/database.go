@@ -40,6 +40,7 @@ func ConnectDatabase() {
 		&entity.JobPosition{},
 		&entity.JobAnnouncement{},
 		&entity.JobCriteria{},
+		&entity.JobCriteriaOption{},
 	)
 	if err != nil {
 		panic("AutoMigrate failed: " + err.Error())
