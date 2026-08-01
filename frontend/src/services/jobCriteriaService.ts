@@ -56,6 +56,7 @@ export async function createJobCriteria(
     name: string;
     description: string;
     weight: number;
+    max_score?: number;
     is_required: boolean;
   }
 ) {
@@ -74,6 +75,7 @@ export async function updateJobCriteria(
     name: string;
     description: string;
     weight: number;
+    max_score?: number;
     is_required: boolean;
   }
 ) {
@@ -118,6 +120,7 @@ export async function createCriteriaOption(
     name: string;
     description: string;
     score: number;
+    max_score?: number;
     is_active: boolean;
   }
 ) {
@@ -136,6 +139,7 @@ export async function updateCriteriaOption(
     name: string;
     description: string;
     score: number;
+    max_score?: number;
     is_active: boolean;
   }
 ) {

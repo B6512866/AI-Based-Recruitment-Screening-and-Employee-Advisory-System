@@ -8,40 +8,34 @@ type JobCriteria struct {
 	// ตำแหน่งงานที่เกณฑ์นี้อยู่
 	JobPositionID uint `json:"job_position_id" gorm:"not null;index"`
 
-	// หมวดของเกณฑ์
-	// ตัวอย่าง:
-	// Hard Skill
-	// Soft Skill
-	// Experience
-	// Education
-	// Other
-	Category string `json:"category" gorm:"default:'Other'"`
+	// หมวดของเกณฑ์ (เช่น: technical_skills, experience, education, soft_skills, other)
+	Category string `json:"category" gorm:"default:'other'"`
 
-	// ชื่อเกณฑ์หลัก
-	// ตัวอย่าง:
-	// วุฒิการศึกษา
-	// ประสบการณ์ด้าน Software Testing
-	// ความสามารถด้าน API Testing
+	// ชื่อเกณฑ์หลัก (เช่น: ความเชี่ยวชาญด้าน Golang, วุฒิการศึกษา)
 	Name string `json:"name" gorm:"not null"`
 
-	// รายละเอียดของเกณฑ์
+	// รายละเอียดเพิ่มเติมของเกณฑ์นี้
 	Description string `json:"description" gorm:"type:text"`
 
-	// น้ำหนักของเกณฑ์หลัก
-	// ใช้สำหรับ AI วิเคราะห์ความสำคัญของเกณฑ์
-	Weight float64 `json:"weight" gorm:"not null;default:0"`
+	// น้ำหนักคะแนน (%) ของเกณฑ์นี้
+	Weight float64 `json:"weight" gorm:"default:0"`
 
-	// เกณฑ์บังคับหรือไม่
+	// เกณฑ์บังคับหรือไม่ (ถ้าเป็น true แล้วผู้สมัครได้ 0 คะแนน อาจจะตกทันที)
 	IsRequired bool `json:"is_required" gorm:"default:false"`
 
-	// คะแนนเต็มของเกณฑ์นี้
-	// ตัวอย่าง:
-	// วุฒิการศึกษาเต็ม 20 คะแนน
-	MaxScore float64 `json:"max_score" gorm:"not null;default:0"`
+	// คะแนนเต็มของเกณฑ์ข้อนี้
+	MaxScore float64 `json:"max_score" gorm:"default:10"`
 
 	// ความสัมพันธ์กับตำแหน่งงาน
 	JobPosition JobPosition `json:"-" gorm:"foreignKey:JobPositionID"`
 
-	// ตัวเลือกคะแนนที่ HR เพิ่มเอง
-	Options []JobCriteriaOption `json:"options" gorm:"foreignKey:JobCriteriaID"`
+	// ตัวเลือกระดับคะแนน (Rubric Levels)
+	Options []JobCriteriaOption `json:"options" gorm:"foreignKey:JobCriteriaID;constraint:OnDelete:CASCADE"`
+}
+
+func (j *JobCriteria) BeforeCreate(tx *gorm.DB) error {
+	if j.MaxScore <= 0 {
+		j.MaxScore = 10
+	}
+	return nil
 }

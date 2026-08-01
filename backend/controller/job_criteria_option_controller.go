@@ -15,407 +15,218 @@ type JobCriteriaOptionController struct {
 	db *gorm.DB
 }
 
-func NewJobCriteriaOptionController(
-	db *gorm.DB,
-) *JobCriteriaOptionController {
+func NewJobCriteriaOptionController(db *gorm.DB) *JobCriteriaOptionController {
 	return &JobCriteriaOptionController{
 		db: db,
 	}
 }
 
-// =====================================================
 // GET /api/job-criteria/:criteriaId/options
-// ดึงตัวเลือกคะแนนทั้งหมดของเกณฑ์
-// =====================================================
-
-func (c *JobCriteriaOptionController) GetByCriteriaID(
-	ctx *gin.Context,
-) {
-	criteriaID, err := strconv.ParseUint(
-		ctx.Param("criteriaId"),
-		10,
-		32,
-	)
-
+func (c *JobCriteriaOptionController) GetByCriteriaID(ctx *gin.Context) {
+	criteriaID, err := strconv.ParseUint(ctx.Param("criteriaId"), 10, 32)
 	if err != nil {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ID เกณฑ์ไม่ถูกต้อง",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID เกณฑ์ไม่ถูกต้อง"})
 		return
 	}
 
 	var criteria entity.JobCriteria
-
-	if err := c.db.First(
-		&criteria,
-		uint(criteriaID),
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบเกณฑ์การประเมิน",
-			},
-		)
+	if err := c.db.First(&criteria, uint(criteriaID)).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเกณฑ์การประเมิน"})
 		return
 	}
 
 	var options []entity.JobCriteriaOption
-
-	if err := c.db.
-		Where(
-			"job_criteria_id = ?",
-			uint(criteriaID),
-		).
-		Order(
-			"created_at ASC",
-		).
-		Find(
-			&options,
-		).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถดึงตัวเลือกคะแนนได้",
-			},
-		)
+	if err := c.db.Where("job_criteria_id = ?", uint(criteriaID)).
+		Order("created_at ASC").
+		Find(&options).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงตัวเลือกคะแนนได้"})
 		return
 	}
 
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{
-			"data": options,
-		},
-	)
+	ctx.JSON(http.StatusOK, gin.H{"data": options})
 }
 
-// =====================================================
 // POST /api/job-criteria/:criteriaId/options
-// เพิ่มตัวเลือกคะแนน
-// =====================================================
-
-func (c *JobCriteriaOptionController) Create(
-	ctx *gin.Context,
-) {
-	criteriaID, err := strconv.ParseUint(
-		ctx.Param("criteriaId"),
-		10,
-		32,
-	)
-
+func (c *JobCriteriaOptionController) Create(ctx *gin.Context) {
+	criteriaID, err := strconv.ParseUint(ctx.Param("criteriaId"), 10, 32)
 	if err != nil {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ID เกณฑ์ไม่ถูกต้อง",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID เกณฑ์ไม่ถูกต้อง"})
 		return
 	}
 
 	var criteria entity.JobCriteria
-
-	if err := c.db.First(
-		&criteria,
-		uint(criteriaID),
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบเกณฑ์การประเมิน",
-			},
-		)
+	if err := c.db.First(&criteria, uint(criteriaID)).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเกณฑ์การประเมิน"})
 		return
 	}
 
 	var req struct {
 		Name        string  `json:"name"`
+		Level       string  `json:"level"`
+		Condition   string  `json:"condition"`
 		Description string  `json:"description"`
 		Score       float64 `json:"score"`
-		IsActive    bool    `json:"is_active"`
+		IsActive    *bool   `json:"is_active"`
 	}
 
-	if err := ctx.ShouldBindJSON(
-		&req,
-	); err != nil {
-
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "รูปแบบข้อมูลไม่ถูกต้อง",
-			},
-		)
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง"})
 		return
 	}
 
-	req.Name = strings.TrimSpace(
-		req.Name,
-	)
-
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "กรุณาระบุชื่อตัวเลือก",
-			},
-		)
+		req.Name = strings.TrimSpace(req.Level)
+	}
+	if req.Name == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุชื่อตัวเลือก"})
 		return
 	}
 
 	if req.Score < 0 {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "คะแนนต้องไม่ติดลบ",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "คะแนนต้องไม่ติดลบ"})
 		return
 	}
 
-	if criteria.MaxScore > 0 &&
-		req.Score > criteria.MaxScore {
-
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "คะแนนตัวเลือกต้องไม่เกินคะแนนเต็มของเกณฑ์",
-			},
-		)
+	if criteria.MaxScore > 0 && req.Score > criteria.MaxScore {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "คะแนนตัวเลือกต้องไม่เกินคะแนนเต็มของเกณฑ์"})
 		return
+	}
+
+	// Dynamic Mapping Condition / Description
+	condVal := req.Condition
+	if condVal == "" {
+		condVal = req.Description
+	}
+
+	isActiveVal := true
+	if req.IsActive != nil {
+		isActiveVal = *req.IsActive
 	}
 
 	option := entity.JobCriteriaOption{
 		JobCriteriaID: uint(criteriaID),
 		Name:          req.Name,
-		Description:   req.Description,
+		Level:         req.Level,
+		Condition:     condVal,
+		Description:   condVal,
 		Score:         req.Score,
-		IsActive:      req.IsActive,
+		IsActive:      isActiveVal,
 	}
 
-	if err := c.db.Create(
-		&option,
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถเพิ่มตัวเลือกคะแนนได้",
-			},
-		)
+	if err := c.db.Create(&option).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเพิ่มตัวเลือกคะแนนได้"})
 		return
 	}
 
-	ctx.JSON(
-		http.StatusCreated,
-		gin.H{
-			"message": "เพิ่มตัวเลือกคะแนนสำเร็จ",
-			"data":    option,
-		},
-	)
+	ctx.JSON(http.StatusCreated, gin.H{
+		"message": "เพิ่มตัวเลือกคะแนนสำเร็จ",
+		"data":    option,
+	})
 }
 
-// =====================================================
 // PUT /api/job-criteria-options/:optionId
-// แก้ไขตัวเลือกคะแนน
-// =====================================================
-
-func (c *JobCriteriaOptionController) Update(
-	ctx *gin.Context,
-) {
-	optionID, err := strconv.ParseUint(
-		ctx.Param("optionId"),
-		10,
-		32,
-	)
-
+func (c *JobCriteriaOptionController) Update(ctx *gin.Context) {
+	optionID, err := strconv.ParseUint(ctx.Param("optionId"), 10, 32)
 	if err != nil {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ID ตัวเลือกไม่ถูกต้อง",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตัวเลือกไม่ถูกต้อง"})
 		return
 	}
 
 	var option entity.JobCriteriaOption
-
-	if err := c.db.First(
-		&option,
-		uint(optionID),
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบตัวเลือกคะแนน",
-			},
-		)
+	if err := c.db.First(&option, uint(optionID)).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตัวเลือกคะแนน"})
 		return
 	}
 
 	var criteria entity.JobCriteria
-
-	if err := c.db.First(
-		&criteria,
-		option.JobCriteriaID,
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบเกณฑ์ของตัวเลือกนี้",
-			},
-		)
+	if err := c.db.First(&criteria, option.JobCriteriaID).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเกณฑ์ของตัวเลือกนี้"})
 		return
 	}
 
 	var req struct {
 		Name        string  `json:"name"`
+		Level       string  `json:"level"`
+		Condition   string  `json:"condition"`
 		Description string  `json:"description"`
 		Score       float64 `json:"score"`
-		IsActive    bool    `json:"is_active"`
+		IsActive    *bool   `json:"is_active"`
 	}
 
-	if err := ctx.ShouldBindJSON(
-		&req,
-	); err != nil {
-
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "รูปแบบข้อมูลไม่ถูกต้อง",
-			},
-		)
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบข้อมูลไม่ถูกต้อง"})
 		return
 	}
 
-	req.Name = strings.TrimSpace(
-		req.Name,
-	)
-
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "กรุณาระบุชื่อตัวเลือก",
-			},
-		)
+		req.Name = strings.TrimSpace(req.Level)
+	}
+	if req.Name == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุชื่อตัวเลือก"})
 		return
 	}
 
 	if req.Score < 0 {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "คะแนนต้องไม่ติดลบ",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "คะแนนต้องไม่ติดลบ"})
 		return
 	}
 
-	if criteria.MaxScore > 0 &&
-		req.Score > criteria.MaxScore {
-
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "คะแนนตัวเลือกต้องไม่เกินคะแนนเต็มของเกณฑ์",
-			},
-		)
+	if criteria.MaxScore > 0 && req.Score > criteria.MaxScore {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "คะแนนตัวเลือกต้องไม่เกินคะแนนเต็มของเกณฑ์"})
 		return
 	}
 
-	option.Name = req.Name
-	option.Description = req.Description
-	option.Score = req.Score
-	option.IsActive = req.IsActive
+	condVal := req.Condition
+	if condVal == "" {
+		condVal = req.Description
+	}
 
-	if err := c.db.Save(
-		&option,
-	).Error; err != nil {
+	updates := map[string]interface{}{
+		"name":        req.Name,
+		"level":       req.Level,
+		"condition":   condVal,
+		"description": condVal,
+		"score":       req.Score,
+	}
 
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถแก้ไขตัวเลือกคะแนนได้",
-			},
-		)
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+
+	if err := c.db.Model(&option).Updates(updates).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถแก้ไขตัวเลือกคะแนนได้"})
 		return
 	}
 
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{
-			"message": "แก้ไขตัวเลือกคะแนนสำเร็จ",
-			"data":    option,
-		},
-	)
+	// Reload เพื่อเอาค่าล่าสุดหลังอัปเดตส่งกลับ Frontend
+	_ = c.db.First(&option, uint(optionID))
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "แก้ไขตัวเลือกคะแนนสำเร็จ",
+		"data":    option,
+	})
 }
 
-// =====================================================
 // DELETE /api/job-criteria-options/:optionId
-// ลบตัวเลือกคะแนน
-// =====================================================
-
-func (c *JobCriteriaOptionController) Delete(
-	ctx *gin.Context,
-) {
-	optionID, err := strconv.ParseUint(
-		ctx.Param("optionId"),
-		10,
-		32,
-	)
-
+func (c *JobCriteriaOptionController) Delete(ctx *gin.Context) {
+	optionID, err := strconv.ParseUint(ctx.Param("optionId"), 10, 32)
 	if err != nil {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ID ตัวเลือกไม่ถูกต้อง",
-			},
-		)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตัวเลือกไม่ถูกต้อง"})
 		return
 	}
 
 	var option entity.JobCriteriaOption
-
-	if err := c.db.First(
-		&option,
-		uint(optionID),
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบตัวเลือกคะแนน",
-			},
-		)
+	if err := c.db.First(&option, uint(optionID)).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตัวเลือกคะแนน"})
 		return
 	}
 
-	if err := c.db.Delete(
-		&option,
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถลบตัวเลือกคะแนนได้",
-			},
-		)
+	if err := c.db.Delete(&option).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบตัวเลือกคะแนนได้"})
 		return
 	}
 
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{
-			"message": "ลบตัวเลือกคะแนนสำเร็จ",
-		},
-	)
+	ctx.JSON(http.StatusOK, gin.H{"message": "ลบตัวเลือกคะแนนสำเร็จ"})
 }

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,13 +11,10 @@ import (
 	"time"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
-
-	"encoding/json"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-
-	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 )
 
 type JobAnnouncementController struct {
@@ -28,7 +26,6 @@ func NewJobAnnouncementController(
 	db *gorm.DB,
 	geminiService *services.GeminiService,
 ) *JobAnnouncementController {
-
 	return &JobAnnouncementController{
 		db:            db,
 		geminiService: geminiService,
@@ -37,73 +34,35 @@ func NewJobAnnouncementController(
 
 // POST /api/job-positions/:id/announcements/upload
 func (c *JobAnnouncementController) Upload(ctx *gin.Context) {
-	// ==========================================
-	// 1. ตรวจสอบ Job Position ID
-	// ==========================================
-	jobID, err := strconv.ParseUint(
-		ctx.Param("id"),
-		10,
-		32,
-	)
-
+	jobID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ID ตำแหน่งงานไม่ถูกต้อง",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตำแหน่งงานไม่ถูกต้อง"})
 		return
 	}
 
-	// ==========================================
-	// 2. ตรวจสอบว่าตำแหน่งงานมีอยู่จริง
-	// ==========================================
 	var job entity.JobPosition
-
 	if err := c.db.First(&job, uint(jobID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"error": "ไม่พบตำแหน่งงาน",
-			})
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงาน"})
 			return
 		}
-
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถตรวจสอบตำแหน่งงานได้",
-		})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตรวจสอบตำแหน่งงานได้"})
 		return
 	}
 
-	// ==========================================
-	// 3. รับไฟล์จาก multipart/form-data
-	// ==========================================
 	file, err := ctx.FormFile("file")
-
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "กรุณาเลือกไฟล์ประกาศงาน",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเลือกไฟล์ประกาศงาน"})
 		return
 	}
 
-	// ==========================================
-	// 4. ตรวจสอบขนาดไฟล์
-	// จำกัด 10 MB
-	// ==========================================
-	const maxFileSize = 10 * 1024 * 1024
-
+	const maxFileSize = 10 * 1024 * 1024 // 10 MB
 	if file.Size > maxFileSize {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ขนาดไฟล์ต้องไม่เกิน 10 MB",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ขนาดไฟล์ต้องไม่เกิน 10 MB"})
 		return
 	}
 
-	// ==========================================
-	// 5. ตรวจสอบนามสกุลไฟล์
-	// ==========================================
-	extension := strings.ToLower(
-		filepath.Ext(file.Filename),
-	)
-
+	extension := strings.ToLower(filepath.Ext(file.Filename))
 	allowedExtensions := map[string]bool{
 		".pdf":  true,
 		".jpg":  true,
@@ -112,62 +71,24 @@ func (c *JobAnnouncementController) Upload(ctx *gin.Context) {
 	}
 
 	if !allowedExtensions[extension] {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "รองรับเฉพาะไฟล์ PDF, JPG, JPEG และ PNG",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รองรับเฉพาะไฟล์ PDF, JPG, JPEG และ PNG"})
 		return
 	}
 
-	// ==========================================
-	// 6. สร้างโฟลเดอร์ ถ้ายังไม่มี
-	// ==========================================
-	uploadDirectory := filepath.Join(
-		"uploads",
-		"job-announcements",
-	)
-
-	if err := os.MkdirAll(
-		uploadDirectory,
-		os.ModePerm,
-	); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถสร้างโฟลเดอร์เก็บไฟล์ได้",
-		})
+	uploadDirectory := filepath.Join("uploads", "job-announcements")
+	if err := os.MkdirAll(uploadDirectory, os.ModePerm); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโฟลเดอร์เก็บไฟล์ได้"})
 		return
 	}
 
-	// ==========================================
-	// 7. สร้างชื่อไฟล์ใหม่
-	// ป้องกันชื่อไฟล์ซ้ำ
-	// ==========================================
-	newFileName := fmt.Sprintf(
-		"job_%d_%d%s",
-		jobID,
-		time.Now().UnixNano(),
-		extension,
-	)
+	newFileName := fmt.Sprintf("job_%d_%d%s", jobID, time.Now().UnixNano(), extension)
+	filePath := filepath.Join(uploadDirectory, newFileName)
 
-	filePath := filepath.Join(
-		uploadDirectory,
-		newFileName,
-	)
-
-	// ==========================================
-	// 8. บันทึกไฟล์
-	// ==========================================
-	if err := ctx.SaveUploadedFile(
-		file,
-		filePath,
-	); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถบันทึกไฟล์ได้",
-		})
+	if err := ctx.SaveUploadedFile(file, filePath); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
 		return
 	}
 
-	// ==========================================
-	// 9. บันทึกข้อมูลลง Database
-	// ==========================================
 	announcement := entity.JobAnnouncement{
 		JobPositionID: uint(jobID),
 		FileName:      file.Filename,
@@ -178,19 +99,11 @@ func (c *JobAnnouncementController) Upload(ctx *gin.Context) {
 	}
 
 	if err := c.db.Create(&announcement).Error; err != nil {
-		// ถ้าบันทึก DB ไม่สำเร็จ
-		// ลบไฟล์ที่เพิ่งอัปโหลดออก
 		_ = os.Remove(filePath)
-
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถบันทึกข้อมูลไฟล์ลงฐานข้อมูลได้",
-		})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลไฟล์ลงฐานข้อมูลได้"})
 		return
 	}
 
-	// ==========================================
-	// 10. ส่งผลลัพธ์กลับ
-	// ==========================================
 	ctx.JSON(http.StatusCreated, gin.H{
 		"message": "อัปโหลดประกาศงานสำเร็จ",
 		"data":    announcement,
@@ -199,302 +112,195 @@ func (c *JobAnnouncementController) Upload(ctx *gin.Context) {
 
 // GET /api/job-positions/:id/announcements
 func (c *JobAnnouncementController) GetByJobPositionID(ctx *gin.Context) {
-	jobID, err := strconv.ParseUint(
-		ctx.Param("id"),
-		10,
-		32,
-	)
-
+	jobID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ID ตำแหน่งงานไม่ถูกต้อง",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตำแหน่งงานไม่ถูกต้อง"})
 		return
 	}
 
-	// ตรวจสอบว่าตำแหน่งงานมีอยู่จริง
 	var job entity.JobPosition
-
 	if err := c.db.First(&job, uint(jobID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"error": "ไม่พบตำแหน่งงาน",
-			})
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงาน"})
 			return
 		}
-
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถตรวจสอบตำแหน่งงานได้",
-		})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตรวจสอบตำแหน่งงานได้"})
 		return
 	}
 
-	// ดึงไฟล์ทั้งหมดของตำแหน่งงาน
 	var announcements []entity.JobAnnouncement
-
-	if err := c.db.
-		Where("job_position_id = ?", uint(jobID)).
+	if err := c.db.Where("job_position_id = ?", uint(jobID)).
 		Order("created_at DESC").
 		Find(&announcements).Error; err != nil {
-
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถดึงรายการประกาศงานได้",
-		})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงรายการประกาศงานได้"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data": announcements,
-	})
+	ctx.JSON(http.StatusOK, gin.H{"data": announcements})
 }
 
 // DELETE /api/job-announcements/:announcementId
 func (c *JobAnnouncementController) Delete(ctx *gin.Context) {
-	announcementID, err := strconv.ParseUint(
-		ctx.Param("announcementId"),
-		10,
-		32,
-	)
-
+	announcementID, err := strconv.ParseUint(ctx.Param("announcementId"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "ID ไฟล์ประกาศไม่ถูกต้อง",
-		})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ไฟล์ประกาศไม่ถูกต้อง"})
 		return
 	}
 
-	// ค้นหาข้อมูลประกาศ
 	var announcement entity.JobAnnouncement
-
-	if err := c.db.
-		First(&announcement, uint(announcementID)).
-		Error; err != nil {
-
+	if err := c.db.First(&announcement, uint(announcementID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"error": "ไม่พบไฟล์ประกาศงาน",
-			})
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์ประกาศงาน"})
 			return
 		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถค้นหาข้อมูลไฟล์ได้"})
+		return
+	}
 
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถค้นหาข้อมูลไฟล์ได้",
+	if announcement.FilePath != "" {
+		safePath := filepath.Clean(announcement.FilePath)
+		if err := os.Remove(safePath); err != nil && !os.IsNotExist(err) {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบไฟล์จากระบบได้"})
+			return
+		}
+	}
+
+	if err := c.db.Delete(&announcement).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบข้อมูลไฟล์ประกาศได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ลบไฟล์ประกาศงานสำเร็จ"})
+}
+
+// POST /api/job-announcements/:announcementId/analyze
+func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
+	announcementID, err := strconv.ParseUint(ctx.Param("announcementId"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ประกาศงานไม่ถูกต้อง"})
+		return
+	}
+
+	var announcement entity.JobAnnouncement
+	if err := c.db.First(&announcement, uint(announcementID)).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์ประกาศงาน"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถค้นหาข้อมูลไฟล์ได้"})
+		return
+	}
+
+	fileType := strings.ToLower(announcement.FileType)
+	allowedTypes := map[string]string{
+		"jpg":  "image/jpeg",
+		"jpeg": "image/jpeg",
+		"png":  "image/png",
+	}
+
+	mimeType, exists := allowedTypes[fileType]
+	if !exists {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "ขณะนี้ API วิเคราะห์รองรับเฉพาะไฟล์ JPG, JPEG และ PNG",
 		})
 		return
 	}
 
-	// ลบไฟล์จริงจากเครื่อง
-	if announcement.FilePath != "" {
-		if err := os.Remove(announcement.FilePath); err != nil {
-			// ถ้าไฟล์ถูกลบไปแล้ว ให้ลบข้อมูล DB ต่อได้
-			if !os.IsNotExist(err) {
-				ctx.JSON(http.StatusInternalServerError, gin.H{
-					"error": "ไม่สามารถลบไฟล์จากระบบได้",
-				})
-				return
-			}
-		}
+	safePath := filepath.Clean(announcement.FilePath)
+	fileData, err := os.ReadFile(safePath)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์ประกาศงานได้"})
+		return
 	}
 
-	// Soft Delete ข้อมูลจาก Database
-	if err := c.db.Delete(&announcement).Error; err != nil {
+	result, err := c.geminiService.AnalyzeImage(fileData, mimeType)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถแปลงผลการวิเคราะห์เป็น JSON ได้"})
+		return
+	}
+
+	err = c.db.Transaction(func(tx *gorm.DB) error {
+		announcement.GeminiResult = string(resultJSON)
+		announcement.Status = "analyzed"
+		if err := tx.Save(&announcement).Error; err != nil {
+			return err
+		}
+
+		// 1. ค้นหา Criteria ทั้งหมดก่อนเพื่อลบ Options ที่ผูกไว้ออกให้หมด (ป้องกัน Orphan Records)
+		var oldCriteriaList []entity.JobCriteria
+		if err := tx.Where("job_position_id = ?", announcement.JobPositionID).Find(&oldCriteriaList).Error; err == nil {
+			for _, oldCrit := range oldCriteriaList {
+				_ = tx.Where("job_criteria_id = ?", oldCrit.ID).Delete(&entity.JobCriteriaOption{}).Error
+			}
+		}
+
+		// 2. ลบ Criteria เก่า
+		if err := tx.Where("job_position_id = ?", announcement.JobPositionID).
+			Delete(&entity.JobCriteria{}).Error; err != nil {
+			return err
+		}
+
+		// 3. สร้าง Criteria + Options ใหม่
+		for _, item := range result.SuggestedCriteria {
+			var options []entity.JobCriteriaOption
+			var maxScore float64 = 0
+
+			for _, rub := range item.SuggestedRubric {
+				score := float64(rub.Score)
+				if score > maxScore {
+					maxScore = score
+				}
+
+				options = append(options, entity.JobCriteriaOption{
+					Name:        rub.Level,
+					Level:       rub.Level,
+					Condition:   rub.Condition,
+					Description: rub.Condition, // Sync Condition ใส่ Description ด้วย
+					Score:       score,
+					IsActive:    true,
+				})
+			}
+
+			// --- เพิ่มส่วนตรวจสอบตรงนี้ ---
+			// ถ้า maxScore ที่คำนวณจากรูบริกเป็น 0 หรือ AI ไม่ได้กำหนดมา ให้กำหนดเป็น 10 เป็นค่า Default
+			if maxScore <= 0 {
+				maxScore = 10
+			}
+			// ----------------------------
+
+			criteria := entity.JobCriteria{
+				JobPositionID: announcement.JobPositionID,
+				Category:      item.Category,
+				Name:          item.Title,
+				Description:   item.Description,
+				IsRequired:    false,
+				MaxScore:      maxScore, // ค่า MaxScore จะเป็น 10 เสมอหากไม่มีค่าหรือเป็น 0
+				Options:       options,
+			}
+
+			if err := tx.Create(&criteria).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "ไม่สามารถลบข้อมูลไฟล์ประกาศได้",
+			"error": "ไม่สามารถบันทึกผลการวิเคราะห์ลงฐานข้อมูลได้",
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message": "ลบไฟล์ประกาศงานสำเร็จ",
+		"message": "Gemini วิเคราะห์และบันทึกเกณฑ์สำเร็จ",
+		"data":    result,
 	})
-}
-func (c *JobAnnouncementController) Analyze(
-	ctx *gin.Context,
-) {
-	// รับ ID ของไฟล์ประกาศ
-	announcementID, err := strconv.ParseUint(
-		ctx.Param("announcementId"),
-		10,
-		32,
-	)
-
-	if err != nil {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ID ประกาศงานไม่ถูกต้อง",
-			},
-		)
-		return
-	}
-
-	// ค้นหาข้อมูลประกาศงาน
-	var announcement entity.JobAnnouncement
-
-	if err := c.db.First(
-		&announcement,
-		uint(announcementID),
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusNotFound,
-			gin.H{
-				"error": "ไม่พบไฟล์ประกาศงาน",
-			},
-		)
-		return
-	}
-
-	// รองรับเฉพาะรูปภาพ
-	allowedTypes := map[string]bool{
-		"jpg":  true,
-		"jpeg": true,
-		"png":  true,
-	}
-
-	fileType := strings.ToLower(
-		announcement.FileType,
-	)
-
-	if !allowedTypes[fileType] {
-		ctx.JSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "ขณะนี้ API วิเคราะห์รองรับ JPG, JPEG และ PNG",
-			},
-		)
-		return
-	}
-
-	// อ่านไฟล์จาก Server
-	fileData, err := os.ReadFile(
-		announcement.FilePath,
-	)
-
-	if err != nil {
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถอ่านไฟล์ประกาศงานได้",
-			},
-		)
-		return
-	}
-
-	// กำหนด MIME Type
-	mimeType := "image/jpeg"
-
-	if fileType == "png" {
-		mimeType = "image/png"
-	}
-
-	// วิเคราะห์ด้วย Gemini
-	result, err := c.geminiService.AnalyzeImage(
-		fileData,
-		mimeType,
-	)
-
-	if err != nil {
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
-		return
-	}
-
-	// แปลงผลลัพธ์ทั้งหมดเป็น JSON
-	resultJSON, err := json.Marshal(
-		result,
-	)
-
-	if err != nil {
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถแปลงผลการวิเคราะห์เป็น JSON ได้",
-			},
-		)
-		return
-	}
-
-	// บันทึกผล Gemini ลง JobAnnouncement
-	announcement.GeminiResult = string(
-		resultJSON,
-	)
-
-	announcement.Status = "analyzed"
-
-	if err := c.db.Save(
-		&announcement,
-	).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถบันทึกผลการวิเคราะห์ได้",
-			},
-		)
-		return
-	}
-
-	// =================================================
-	// ลบเกณฑ์เก่าของตำแหน่งงาน
-	// =================================================
-
-	if err := c.db.
-		Where(
-			"job_position_id = ?",
-			announcement.JobPositionID,
-		).
-		Delete(
-			&entity.JobCriteria{},
-		).Error; err != nil {
-
-		ctx.JSON(
-			http.StatusInternalServerError,
-			gin.H{
-				"error": "ไม่สามารถลบเกณฑ์เดิมได้",
-			},
-		)
-		return
-	}
-
-	// =================================================
-	// บันทึก suggested_criteria จาก Gemini
-	// =================================================
-
-	for _, item := range result.SuggestedCriteria {
-
-		criteria := entity.JobCriteria{
-			JobPositionID: announcement.JobPositionID,
-			Name:          item.Name,
-			Description:   item.Description,
-			Weight:        item.Weight,
-			IsRequired:    false,
-		}
-
-		if err := c.db.Create(
-			&criteria,
-		).Error; err != nil {
-
-			ctx.JSON(
-				http.StatusInternalServerError,
-				gin.H{
-					"error": "ไม่สามารถบันทึกเกณฑ์จาก Gemini ได้",
-				},
-			)
-			return
-		}
-	}
-
-	// ส่งผลลัพธ์กลับไป Frontend
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{
-			"message": "Gemini วิเคราะห์และบันทึกเกณฑ์สำเร็จ",
-			"data":    result,
-		},
-	)
 }

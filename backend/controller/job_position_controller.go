@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -46,8 +47,7 @@ func (c *JobPositionController) Create(ctx *gin.Context) {
 		return
 	}
 
-	// ดึง userID จาก AuthMiddleware
-	var userID uint = 1 // default เป็น 1 เผื่อกรณีไม่มี auth
+	var userID uint = 1
 	if idVal, exists := ctx.Get("id"); exists {
 		if idFloat, ok := idVal.(float64); ok {
 			userID = uint(idFloat)
@@ -142,6 +142,7 @@ func (c *JobPositionController) Delete(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "ลบตำแหน่งงานสำเร็จ"})
 }
 
+// POST /api/job-positions/:id/apply
 func (c *JobPositionController) Apply(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	jobID, err := strconv.ParseUint(idStr, 10, 32)
@@ -149,12 +150,13 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตำแหน่งงานไม่ถูกต้อง"})
 		return
 	}
-	// 1. เช็คว่าตำแหน่งงานนี้มีอยู่จริงไหม
+
 	var job entity.JobPosition
 	if err := c.db.First(&job, jobID).Error; err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงานนี้ในระบบ"})
 		return
 	}
+
 	var req struct {
 		entity.Candidate
 		ResumeURL      string `json:"resume_url"`
@@ -165,23 +167,20 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลและอัปโหลดเอกสารให้ครบถ้วน"})
 		return
 	}
-	// 2. ค้นหา Candidate เดิม หรือถ้าไม่มีให้สร้างขึ้นใหม่ (Find or Create by Email)
-	var candidate entity.Candidate
-	err = c.db.Where("email = ?", req.Email).First(&candidate).Error
-	if err != nil {
-		// ถ้าไม่พบ ให้สร้าง Candidate ใหม่
-		candidate = entity.Candidate{
-			FirstName: req.FirstName,
-			LastName:  req.LastName,
-			Email:     req.Email,
-			Phone:     req.Phone,
-		}
-		if err := c.db.Create(&candidate).Error; err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลผู้สมัครได้"})
-			return
-		}
+
+	candidate := entity.Candidate{
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Email:     req.Email,
+		Phone:     req.Phone,
 	}
-	// 3. สร้างข้อมูลใบสมัคร (Application) บันทึกคู่กับ JobPositionID
+
+	if err := c.db.Where(entity.Candidate{Email: req.Email}).
+		FirstOrCreate(&candidate).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลผู้สมัครได้"})
+		return
+	}
+
 	app := entity.Application{
 		Status:         "รอพิจารณา",
 		Position:       job.Title,
@@ -192,19 +191,20 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		CandidateID:    candidate.ID,
 		JobPositionID:  job.ID,
 	}
+
 	if err := c.db.Create(&app).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งใบสมัครไม่สำเร็จ"})
 		return
 	}
+
 	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งใบสมัครสำเร็จ!"})
 }
 
-// ── สำหรับ HR ดึงรายชื่อผู้สมัครแยกตามตำแหน่งงาน
-
+// GET /api/job-positions/:id/applications
 func (c *JobPositionController) GetApplications(ctx *gin.Context) {
 	id := ctx.Param("id")
 	var apps []entity.Application
-	// ดึงรายการใบสมัครทั้งหมดของตำแหน่งงานนี้ พร้อมโหลดข้อมูล Candidate และ AIScreening เชื่อมโยงมาด้วย
+
 	err := c.db.Preload("Candidate").Preload("AIScreening").
 		Where("job_position_id = ?", id).
 		Order("created_at desc").
@@ -213,10 +213,11 @@ func (c *JobPositionController) GetApplications(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลผู้สมัครได้"})
 		return
 	}
+
 	ctx.JSON(http.StatusOK, gin.H{"data": apps})
 }
 
-// ── บันทึก/อัปเดตผลคัดกรอง AI สำหรับใบสมัครรายคน
+// PUT /api/applications/:appId/screening
 func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	idStr := ctx.Param("appId")
 	appID, err := strconv.ParseUint(idStr, 10, 32)
@@ -242,48 +243,61 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 		return
 	}
 
-	if req.ResumeText != "" {
-		app.ResumeText = req.ResumeText
-	}
+	var responseData entity.AIScreening
 
-	// 1. ถ้ามีประวัติการประเมินอยู่แล้ว ให้อัปเดตของเดิม
-	if app.ScreeningID != nil {
-		var scr entity.AIScreening
-		if err := c.db.First(&scr, *app.ScreeningID).Error; err == nil {
-			scr.SkillScore = req.Score
-			scr.Strengths = req.Strengths
-			scr.ModelUsed = req.ModelUsed
-			if err := c.db.Save(&scr).Error; err != nil {
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลประเมิน AI ได้"})
-				return
-			}
-
-			app.AIScore = req.Score
-			c.db.Save(&app)
-			ctx.JSON(http.StatusOK, gin.H{"message": "อัปเดตการประเมิน AI สำเร็จ", "data": scr})
-			return
+	err = c.db.Transaction(func(tx *gorm.DB) error {
+		if req.ResumeText != "" {
+			app.ResumeText = req.ResumeText
 		}
-	}
 
-	// 2. ถ้ายังไม่มี ให้สร้าง AIScreening ใหม่และบันทึกเชื่อมโยง
-	scr := entity.AIScreening{
-		SkillScore: req.Score,
-		Strengths:  req.Strengths,
-		ModelUsed:  req.ModelUsed,
-	}
-	if err := c.db.Create(&scr).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลการประเมิน AI ได้"})
+		if app.ScreeningID != nil {
+			var scr entity.AIScreening
+			if err := tx.First(&scr, *app.ScreeningID).Error; err == nil {
+				scr.SkillScore = req.Score
+				scr.Strengths = req.Strengths
+				scr.ModelUsed = req.ModelUsed
+				if err := tx.Save(&scr).Error; err != nil {
+					return err
+				}
+
+				app.AIScore = req.Score
+				if err := tx.Save(&app).Error; err != nil {
+					return err
+				}
+
+				responseData = scr
+				return nil
+			}
+		}
+
+		scr := entity.AIScreening{
+			SkillScore: req.Score,
+			Strengths:  req.Strengths,
+			ModelUsed:  req.ModelUsed,
+		}
+		if err := tx.Create(&scr).Error; err != nil {
+			return err
+		}
+
+		app.ScreeningID = &scr.ID
+		app.AIScore = req.Score
+		if err := tx.Save(&app).Error; err != nil {
+			return err
+		}
+
+		responseData = scr
+		return nil
+	})
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกผลการประเมิน AI ได้"})
 		return
 	}
 
-	app.ScreeningID = &scr.ID
-	app.AIScore = req.Score
-	if err := c.db.Save(&app).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเชื่อมโยงผลประเมิน AI กับใบสมัครได้"})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"message": "วิเคราะห์ผู้สมัครและบันทึกคะแนน AI สำเร็จ", "data": scr})
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "วิเคราะห์ผู้สมัครและบันทึกคะแนน AI สำเร็จ",
+		"data":    responseData,
+	})
 }
 
 // DELETE /api/applications/:appId

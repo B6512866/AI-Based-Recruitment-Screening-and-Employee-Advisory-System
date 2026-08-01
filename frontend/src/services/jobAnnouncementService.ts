@@ -47,7 +47,11 @@ export async function analyzeJobAnnouncement(
   announcementId: number
 ) {
   const res = await apiClient.post(
-    `/job-announcements/${announcementId}/analyze`
+    `/job-announcements/${announcementId}/analyze`,
+    {},
+    {
+      timeout: 60000, // 💡 ตั้ง Timeout เป็น 60 วินาที สำหรับกระบวนการ AI
+    }
   );
 
   return res.data;

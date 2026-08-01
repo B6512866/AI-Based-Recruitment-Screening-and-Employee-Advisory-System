@@ -10,43 +10,53 @@ import (
 	"google.golang.org/genai"
 )
 
+// 1. ประกาศ Struct GeminiService
 type GeminiService struct {
 	client *genai.Client
 	model  string
 }
 
-type SuggestedCriteria struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Weight      float64 `json:"weight"`
+// โครงสร้างระดับคะแนนของแต่ละ Rubric
+type RubricLevel struct {
+	Level     string `json:"level"`
+	Condition string `json:"condition"`
+	Score     int    `json:"score"`
 }
 
+// โครงสร้างเกณฑ์การประเมินย่อยแต่ละข้อ
+type CriteriaRubric struct {
+	ID              string        `json:"id"`
+	Category        string        `json:"category"`
+	Title           string        `json:"title"`
+	Description     string        `json:"description"`
+	SuggestedRubric []RubricLevel `json:"suggested_rubric"`
+}
+
+// โครงสร้างผลลัพธ์การวิเคราะห์ประกาศงาน
 type JobAnalysisResult struct {
-	Title             string              `json:"title"`
-	Department        string              `json:"department"`
-	Location          string              `json:"location"`
-	EmploymentType    string              `json:"employment_type"`
-	Salary            string              `json:"salary"`
-	Description       []string            `json:"description"`
-	Responsibilities  []string            `json:"responsibilities"`
-	Requirements      []string            `json:"requirements"`
-	TechnicalSkills   []string            `json:"technical_skills"`
-	SoftSkills        []string            `json:"soft_skills"`
-	Education         string              `json:"education"`
-	Experience        string              `json:"experience"`
-	SuggestedCriteria []SuggestedCriteria `json:"suggested_criteria"`
+	Title             string           `json:"title"`
+	Department        string           `json:"department"`
+	Location          string           `json:"location"`
+	EmploymentType    string           `json:"employment_type"`
+	Salary            string           `json:"salary"`
+	Description       []string         `json:"description"`
+	Responsibilities  []string         `json:"responsibilities"`
+	Requirements      []string         `json:"requirements"`
+	TechnicalSkills   []string         `json:"technical_skills"`
+	SoftSkills        []string         `json:"soft_skills"`
+	Education         string           `json:"education"`
+	Experience        string           `json:"experience"`
+	SuggestedCriteria []CriteriaRubric `json:"suggested_criteria"`
 }
 
-// สร้าง Gemini Service
+// 2. เมธอดสร้าง GeminiService
 func NewGeminiService() (*GeminiService, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
-
 	if apiKey == "" {
 		return nil, fmt.Errorf("ไม่พบ GEMINI_API_KEY")
 	}
 
 	model := os.Getenv("GEMINI_MODEL")
-
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
@@ -57,12 +67,8 @@ func NewGeminiService() (*GeminiService, error) {
 			APIKey: apiKey,
 		},
 	)
-
 	if err != nil {
-		return nil, fmt.Errorf(
-			"สร้าง Gemini Client ไม่สำเร็จ: %w",
-			err,
-		)
+		return nil, fmt.Errorf("สร้าง Gemini Client ไม่สำเร็จ: %w", err)
 	}
 
 	return &GeminiService{
@@ -71,100 +77,76 @@ func NewGeminiService() (*GeminiService, error) {
 	}, nil
 }
 
-// วิเคราะห์รูปภาพประกาศงานด้วย Gemini
+// 3. เมธอดวิเคราะห์รูปภาพ
 func (s *GeminiService) AnalyzeImage(
 	imageData []byte,
 	mimeType string,
 ) (*JobAnalysisResult, error) {
 
-	// ป้องกัน nil pointer
-	if s == nil {
-		return nil, fmt.Errorf(
-			"Gemini Service ยังไม่ได้ถูกสร้าง กรุณาตรวจสอบ GEMINI_API_KEY และการสร้าง GeminiService",
-		)
-	}
-
-	if s.client == nil {
-		return nil, fmt.Errorf(
-			"Gemini Client ยังไม่ได้ถูกสร้าง กรุณาตรวจสอบ GEMINI_API_KEY",
-		)
+	if s == nil || s.client == nil {
+		return nil, fmt.Errorf("Gemini Client ยังไม่ได้ถูกสร้างอย่างถูกต้อง")
 	}
 
 	if len(imageData) == 0 {
-		return nil, fmt.Errorf(
-			"ไม่พบข้อมูลรูปภาพสำหรับส่งให้ Gemini วิเคราะห์",
-		)
+		return nil, fmt.Errorf("ไม่พบข้อมูลรูปภาพสำหรับส่งให้ Gemini วิเคราะห์")
 	}
 
 	if strings.TrimSpace(mimeType) == "" {
-		return nil, fmt.Errorf(
-			"ไม่พบ MIME Type ของรูปภาพ",
-		)
+		return nil, fmt.Errorf("ไม่พบ MIME Type ของรูปภาพ")
 	}
 
-	// โค้ดเดิมด้านล่างทำงานต่อได้
 	prompt := `
 คุณเป็นผู้เชี่ยวชาญด้าน HR และการวิเคราะห์ประกาศรับสมัครงาน
 
-วิเคราะห์รูปภาพประกาศรับสมัครงานที่ได้รับ และดึงข้อมูลต่อไปนี้:
+จงวิเคราะห์รูปภาพประกาศรับสมัครงานที่ได้รับ และปฏิบัติภารกิจดังต่อไปนี้:
 
-- title: ชื่อตำแหน่งงาน
-- department: แผนก
-- location: สถานที่ทำงาน
-- employment_type: ประเภทการจ้างงาน
-- salary: เงินเดือน
-- description: รายละเอียดงาน
-- responsibilities: หน้าที่ความรับผิดชอบ
-- requirements: คุณสมบัติผู้สมัคร
-- technical_skills: ทักษะทางเทคนิค
-- soft_skills: ทักษะด้านการทำงาน
-- education: วุฒิการศึกษา
-- experience: ประสบการณ์ทำงาน
+1. สกัดข้อมูลพื้นฐานของประกาศงานสำหรับสร้างตำแหน่งงานในระบบ
+2. สกัดคุณสมบัติที่ต้องการออกมาเป็นข้อๆ และสร้าง "ร่างเกณฑ์ประเมินระดับคะแนน (Suggested Rubric)" เพื่อให้ HR นำไปปรับแต่งตัวเลขคะแนนและเงื่อนไขต่อเองได้ง่าย
 
-สร้าง suggested_criteria สำหรับใช้ประเมินผู้สมัคร
+รูปแบบโครงสร้างข้อมูลต้องเป็น JSON ตามรายละเอียดนี้เท่านั้น:
 
-แต่ละเกณฑ์ต้องมี:
+{
+  "title": "ชื่อตำแหน่งงาน (string)",
+  "department": "แผนก (string)",
+  "location": "สถานที่ทำงาน (string)",
+  "employment_type": "ประเภทการจ้างงาน เช่น Full-time, Part-time (string)",
+  "salary": "เงินเดือน (string)",
+  "description": ["รายละเอียดงาน (array of strings)"],
+  "responsibilities": ["หน้าที่ความรับผิดชอบ (array of strings)"],
+  "requirements": ["คุณสมบัติผู้สมัครโดยรวม (array of strings)"],
+  "technical_skills": ["ทักษะทางเทคนิค (array of strings)"],
+  "soft_skills": ["ทักษะด้านการทำงานร่วมกัน (array of strings)"],
+  "education": "วุฒิการศึกษา (string)",
+  "experience": "ประสบการณ์ทำงาน (string)",
+  "suggested_criteria": [
+    {
+      "id": "req_1",
+      "category": "หมวดหมู่ เช่น technical_skills, experience, education, soft_skills (string)",
+      "title": "หัวข้อคุณสมบัติย่อย เช่น ความเชี่ยวชาญ Golang (string)",
+      "description": "คำอธิบายรายละเอียดคุณสมบัตินี้ (string)",
+      "suggested_rubric": [
+        {
+          "level": "ชื่อระดับ เช่น Excellent, Good, Fair, Poor หรือ Match, Partial Match, No Match (string)",
+          "condition": "เงื่อนไขคุณสมบัติของผู้สมัครที่จะตกอยู่ในระดับนี้ (string)",
+          "score": 10
+        }
+      ]
+    }
+  ]
+}
 
-- name
-- description
-- weight
-
-น้ำหนักรวมของทุกเกณฑ์ต้องเท่ากับ 100
-
-หากข้อมูลบางส่วนไม่มีในประกาศ ให้ใช้ค่าว่าง
-
-รูปแบบชนิดข้อมูลต้องเป็นดังนี้:
-
-- title: string
-- department: string
-- location: string
-- employment_type: string
-- salary: string
-- description: array of strings
-- responsibilities: array of strings
-- requirements: array of strings
-- technical_skills: array of strings
-- soft_skills: array of strings
-- education: string
-- experience: string
-- suggested_criteria: array
-
-หากไม่มีข้อมูล:
-- ข้อมูลแบบ string ให้ใช้ ""
-- ข้อมูลแบบ array ให้ใช้ []
-
-ตอบเป็น JSON เท่านั้น
-ห้ามมีข้อความอื่นนอกเหนือจาก JSON
-ห้ามครอบ JSON ด้วย Markdown
+เงื่อนไขเพิ่มเติม:
+- หากข้อมูลส่วนใดไม่มีในรูปภาพ ให้ใส่ "" สำหรับ string และ [] สำหรับ array
+- ไม่ต้องใส่ weight หรือเปรียบเทียบเป็น 100%
+- ค่า score ใน suggested_rubric ให้ใส่เป็นตัวเลขคะแนนเริ่มต้นที่สมเหตุสมผล (เช่น 10, 7, 4, 0 หรือ 5, 3, 0) เพื่อให้ HR ไปแก้ไขต่อได้
+- ตอบกลับเป็น Pure JSON เท่านั้น ห้ามมีข้อความอื่นเกริ่นนำ และห้ามครอบด้วย Markdown code block (` + "```json" + `)
 `
 
 	contents := []*genai.Content{
 		{
 			Role: "user",
 			Parts: []*genai.Part{
-				{
-					Text: prompt,
-				},
+				{Text: prompt},
 				{
 					InlineData: &genai.Blob{
 						MIMEType: mimeType,
@@ -185,21 +167,14 @@ func (s *GeminiService) AnalyzeImage(
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf(
-			"Gemini วิเคราะห์รูปภาพไม่สำเร็จ: %w",
-			err,
-		)
+		return nil, fmt.Errorf("Gemini วิเคราะห์รูปภาพไม่สำเร็จ: %w", err)
 	}
 
 	responseText := strings.TrimSpace(response.Text())
-
 	if responseText == "" {
-		return nil, fmt.Errorf(
-			"Gemini ไม่ส่งผลลัพธ์กลับมา",
-		)
+		return nil, fmt.Errorf("Gemini ไม่ส่งผลลัพธ์กลับมา")
 	}
 
-	// เผื่อ Gemini ส่ง Markdown กลับมา
 	responseText = strings.TrimPrefix(responseText, "```json")
 	responseText = strings.TrimPrefix(responseText, "```JSON")
 	responseText = strings.TrimPrefix(responseText, "```")
@@ -207,16 +182,8 @@ func (s *GeminiService) AnalyzeImage(
 	responseText = strings.TrimSpace(responseText)
 
 	var result JobAnalysisResult
-
-	if err := json.Unmarshal(
-		[]byte(responseText),
-		&result,
-	); err != nil {
-		return nil, fmt.Errorf(
-			"แปลงผล Gemini เป็น JSON ไม่สำเร็จ: %w\nผลลัพธ์: %s",
-			err,
-			responseText,
-		)
+	if err := json.Unmarshal([]byte(responseText), &result); err != nil {
+		return nil, fmt.Errorf("แปลงผล Gemini เป็น JSON ไม่สำเร็จ: %w\nผลลัพธ์: %s", err, responseText)
 	}
 
 	return &result, nil
