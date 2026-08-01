@@ -139,6 +139,7 @@ func (c *JobCriteriaController) Create(
 		Name        string  `json:"name"`
 		Description string  `json:"description"`
 		Weight      float64 `json:"weight"`
+		MaxScore    float64 `json:"max_score"`
 		IsRequired  bool    `json:"is_required"`
 	}
 
@@ -184,6 +185,7 @@ func (c *JobCriteriaController) Create(
 		Name:          req.Name,
 		Description:   req.Description,
 		Weight:        req.Weight,
+		MaxScore:      req.MaxScore,
 		IsRequired:    req.IsRequired,
 	}
 
@@ -253,6 +255,7 @@ func (c *JobCriteriaController) Update(
 		Name        string  `json:"name"`
 		Description string  `json:"description"`
 		Weight      float64 `json:"weight"`
+		MaxScore    float64 `json:"max_score"`
 		IsRequired  bool    `json:"is_required"`
 	}
 
@@ -295,6 +298,7 @@ func (c *JobCriteriaController) Update(
 	criteria.Description = req.Description
 	criteria.Weight = req.Weight
 	criteria.IsRequired = req.IsRequired
+	criteria.MaxScore = req.MaxScore
 
 	if err := c.db.Save(
 		&criteria,

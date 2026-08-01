@@ -5,19 +5,17 @@ import {
 } from "react";
 
 import {
-  Alert,
   Button,
   Card,
   Col,
+  Descriptions,
   Divider,
   Empty,
   Form,
   Input,
-  InputNumber,
   List,
   Modal,
   Popconfirm,
-  Progress,
   Row,
   Select,
   Space,
@@ -32,17 +30,17 @@ import {
 
 import type {
   UploadFile,
-} from "antd/es/upload/interface";
+  UploadProps,
+} from "antd";
 
 import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
-  FileImageOutlined,
   PlusOutlined,
   RobotOutlined,
   SaveOutlined,
-  SearchOutlined,
+  SettingOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 
@@ -55,66 +53,156 @@ import {
 
 import {
   analyzeJobAnnouncement,
-  createJobCriteria,
-  deleteJobAnnouncement,
-  deleteJobCriteria,
-  getJobAnnouncements,
-  getJobCriteria,
-  type JobAnalysisResult,
-  type JobAnnouncement,
-  type JobCriteria,
-  updateJobCriteria,
   uploadJobAnnouncement,
 } from "../../services/jobAnnouncementService";
 
-const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
+import JobCriteriaPage from "./JobCriteriaPage";
+
+const {
+  Title,
+  Text,
+  Paragraph,
+} = Typography;
+
+const {
+  TextArea,
+} = Input;
 
 // =====================================================
 // Types
 // =====================================================
 
+interface SuggestedCriteria {
+  name: string;
+  description: string;
+  weight: number;
+}
+
+interface GeminiResult {
+  title: string;
+  department: string;
+  location: string;
+  employment_type: string;
+  salary: string;
+
+  description:
+    | string
+    | string[];
+
+  responsibilities:
+    | string
+    | string[];
+
+  requirements:
+    | string
+    | string[];
+
+  technical_skills:
+    | string
+    | string[];
+
+  soft_skills:
+    | string
+    | string[];
+
+  education: string;
+
+  experience: string;
+
+  suggested_criteria:
+    SuggestedCriteria[];
+}
+
 interface JobPosition {
   ID: number;
 
   title: string;
-  description: string;
-  criteria: string;
 
   department?: string;
+
   location?: string;
+
   salary?: string;
 
   type?: string;
+
   benefits?: string;
 
   contact_info?: string;
 
+  description?: string;
+
+  criteria?: string;
+
+  status?: string;
+
+  criteria_items?: unknown[];
+}
+
+interface JobFormValues {
+  title: string;
+
+  department?: string;
+
+  location?: string;
+
+  salary?: string;
+
+  type?: string;
+
+  benefits?: string;
+
+  contact_info?: string;
+
+  description?: string;
+
+  criteria?: string;
+
   status?: string;
 }
 
-interface JobFormData {
-  title: string;
-  description: string;
-  criteria: string;
+// =====================================================
+// Helper Functions
+// =====================================================
 
-  department: string;
-  location: string;
-  salary: string;
+function convertToText(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string {
+  if (!value) {
+    return "";
+  }
 
-  type: string;
+  if (Array.isArray(value)) {
+    return value.join("\n");
+  }
 
-  benefits: string;
-  contact_info: string;
-
-  status: string;
+  return value;
 }
 
-interface CriteriaFormData {
-  name: string;
-  description: string;
-  weight: number;
-  is_required: boolean;
+function convertToArray(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return value
+    .split("\n")
+    .map(
+      (item) =>
+        item.trim(),
+    )
+    .filter(Boolean);
 }
 
 // =====================================================
@@ -122,117 +210,110 @@ interface CriteriaFormData {
 // =====================================================
 
 export default function PositionsPage() {
-  const [messageApi, contextHolder] =
-    message.useMessage();
+  const [
+    form,
+  ] = Form.useForm<JobFormValues>();
 
   // ===================================================
-  // Jobs
-  // ===================================================
-
-  const [jobs, setJobs] =
-    useState<JobPosition[]>([]);
-
-  const [loadingJobs, setLoadingJobs] =
-    useState(false);
-
-  const [searchText, setSearchText] =
-    useState("");
-
-  // ===================================================
-  // Job Modal
-  // ===================================================
-
-  const [jobModalOpen, setJobModalOpen] =
-    useState(false);
-
-  const [editingJob, setEditingJob] =
-    useState<JobPosition | null>(null);
-
-  const [savingJob, setSavingJob] =
-    useState(false);
-
-  const [jobForm] =
-    Form.useForm<JobFormData>();
-
-  // ===================================================
-  // Detail Modal
-  // ===================================================
-
-  const [selectedJob, setSelectedJob] =
-    useState<JobPosition | null>(null);
-
-  const [detailModalOpen, setDetailModalOpen] =
-    useState(false);
-
-  // ===================================================
-  // Announcement
+  // Job Data
   // ===================================================
 
   const [
-    announcementModalOpen,
-    setAnnouncementModalOpen,
+    jobs,
+    setJobs,
+  ] = useState<
+    JobPosition[]
+  >([]);
+
+  const [
+    loading,
+    setLoading,
   ] = useState(false);
 
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null);
-
-  const [uploadFileList, setUploadFileList] =
-    useState<UploadFile[]>([]);
-
-  const [uploading, setUploading] =
-    useState(false);
-
-  const [analyzing, setAnalyzing] =
-    useState(false);
-
   const [
-    announcements,
-    setAnnouncements,
-  ] = useState<JobAnnouncement[]>([]);
-
-  // ===================================================
-  // Gemini Result
-  // ===================================================
-
-  const [analysisResult, setAnalysisResult] =
-    useState<JobAnalysisResult | null>(
-      null
-    );
-
-  const [
-    analysisModalOpen,
-    setAnalysisModalOpen,
+    saving,
+    setSaving,
   ] = useState(false);
 
   // ===================================================
-  // Criteria
+  // Main Modal
   // ===================================================
 
-  const [criteria, setCriteria] =
-    useState<JobCriteria[]>([]);
+  const [
+    modalOpen,
+    setModalOpen,
+  ] = useState(false);
 
-  const [loadingCriteria, setLoadingCriteria] =
-    useState(false);
+  const [
+    previewOpen,
+    setPreviewOpen,
+  ] = useState(false);
+
+  const [
+    editingJob,
+    setEditingJob,
+  ] = useState<
+    JobPosition
+    | null
+  >(null);
+
+  // ===================================================
+  // Criteria Modal
+  // ===================================================
+
+  const [
+    selectedJobId,
+    setSelectedJobId,
+  ] = useState<
+    number
+    | null
+  >(null);
 
   const [
     criteriaModalOpen,
     setCriteriaModalOpen,
   ] = useState(false);
 
-  const [
-    editingCriteria,
-    setEditingCriteria,
-  ] = useState<JobCriteria | null>(
-    null
-  );
+  // ===================================================
+  // Upload
+  // ===================================================
 
   const [
-    savingCriteria,
-    setSavingCriteria,
+    fileList,
+    setFileList,
+  ] = useState<
+    UploadFile[]
+  >([]);
+
+  const [
+    uploadedAnnouncementID,
+    setUploadedAnnouncementID,
+  ] = useState<
+    number
+    | null
+  >(null);
+
+  const [
+    uploading,
+    setUploading,
   ] = useState(false);
 
-  const [criteriaForm] =
-    Form.useForm<CriteriaFormData>();
+  // ===================================================
+  // Gemini
+  // ===================================================
+
+  const [
+    analyzing,
+    setAnalyzing,
+  ] = useState(false);
+
+  const [
+    geminiResult,
+    setGeminiResult,
+  ] = useState<
+    GeminiResult
+    | null
+  >(null);
 
   // ===================================================
   // Load Jobs
@@ -240,24 +321,36 @@ export default function PositionsPage() {
 
   async function loadJobs() {
     try {
-      setLoadingJobs(true);
+      setLoading(true);
 
       const response =
         await getalljobs();
 
-      setJobs(
-        response.data ??
-          response ??
-          []
-      );
-    } catch (error) {
-      console.error(error);
+      const jobData =
+        response?.data ??
+        response ??
+        [];
 
-      messageApi.error(
-        "ไม่สามารถโหลดตำแหน่งงานได้"
+      setJobs(
+        Array.isArray(
+          jobData,
+        )
+          ? jobData
+          : [],
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Load Jobs Error:",
+        error,
+      );
+
+      message.error(
+        "ไม่สามารถโหลดข้อมูลตำแหน่งงานได้",
       );
     } finally {
-      setLoadingJobs(false);
+      setLoading(false);
     }
   }
 
@@ -266,176 +359,644 @@ export default function PositionsPage() {
   }, []);
 
   // ===================================================
-  // Filter
+  // Statistics
   // ===================================================
 
-  const filteredJobs =
+  const statistics =
     useMemo(() => {
-      const keyword =
-        searchText
-          .trim()
-          .toLowerCase();
+      const total =
+        jobs.length;
 
-      if (!keyword) {
-        return jobs;
-      }
+      const opened =
+        jobs.filter(
+          (job) =>
+            job.status ===
+            "เปิดรับสมัคร",
+        ).length;
 
-      return jobs.filter(
-        (job) =>
-          job.title
-            ?.toLowerCase()
-            .includes(keyword) ||
-          job.department
-            ?.toLowerCase()
-            .includes(keyword) ||
-          job.location
-            ?.toLowerCase()
-            .includes(keyword)
-      );
+      const closed =
+        jobs.filter(
+          (job) =>
+            job.status ===
+            "ปิดรับสมัครแล้ว",
+        ).length;
+
+      return {
+        total,
+        opened,
+        closed,
+      };
     }, [
       jobs,
-      searchText,
     ]);
 
   // ===================================================
-  // Job Create
+  // Reset Modal
   // ===================================================
 
-  function openCreateJob() {
-    setEditingJob(null);
+  function resetModal() {
+    form.resetFields();
 
-    jobForm.resetFields();
-
-    jobForm.setFieldsValue({
-      title: "",
-      description: "",
-      criteria: "",
-
-      department: "",
-      location: "",
-      salary: "",
-
-      type: "",
-      benefits: "",
-      contact_info: "",
-
-      status: "เปิดรับสมัคร",
+    form.setFieldsValue({
+      status:
+        "เปิดรับสมัคร",
     });
 
-    setJobModalOpen(true);
+    setEditingJob(
+      null,
+    );
+
+    setGeminiResult(
+      null,
+    );
+
+    setFileList(
+      [],
+    );
+
+    setUploadedAnnouncementID(
+      null,
+    );
+
+    setPreviewOpen(
+      false,
+    );
   }
 
   // ===================================================
-  // Job Edit
+  // Open Create Modal
   // ===================================================
 
-  function openEditJob(
-    job: JobPosition
+  function openCreateModal() {
+    resetModal();
+
+    setModalOpen(
+      true,
+    );
+  }
+
+  // ===================================================
+  // Open Edit Modal
+  // ===================================================
+
+  function openEditModal(
+    job: JobPosition,
   ) {
-    setEditingJob(job);
+    setEditingJob(
+      job,
+    );
 
-    jobForm.setFieldsValue({
-      title: job.title ?? "",
-      description:
-        job.description ?? "",
+    setGeminiResult(
+      null,
+    );
 
-      criteria:
-        job.criteria ?? "",
+    setFileList(
+      [],
+    );
+
+    setUploadedAnnouncementID(
+      null,
+    );
+
+    form.setFieldsValue({
+      title:
+        job.title,
 
       department:
-        job.department ?? "",
+        job.department ??
+        "",
 
       location:
-        job.location ?? "",
+        job.location ??
+        "",
 
       salary:
-        job.salary ?? "",
+        job.salary ??
+        "",
 
       type:
-        job.type ?? "",
+        job.type ??
+        "",
 
       benefits:
-        job.benefits ?? "",
+        job.benefits ??
+        "",
 
       contact_info:
-        job.contact_info ?? "",
+        job.contact_info ??
+        "",
+
+      description:
+        job.description ??
+        "",
+
+      criteria:
+        job.criteria ??
+        "",
 
       status:
         job.status ??
         "เปิดรับสมัคร",
     });
 
-    setJobModalOpen(true);
+    setModalOpen(
+      true,
+    );
+  }
+
+  // ===================================================
+  // Create Temporary Job
+  // ===================================================
+
+  async function createTemporaryJob():
+    Promise<
+      JobPosition
+    > {
+
+    const values =
+      form.getFieldsValue();
+
+    if (
+      !values.title ||
+      !values.title.trim()
+    ) {
+      throw new Error(
+        "กรุณาระบุชื่อตำแหน่งงานก่อนอัปโหลดรูป",
+      );
+    }
+
+    const response =
+      await createjob(
+        values.title,
+        values.description ??
+          "",
+        values.criteria ??
+          "",
+        values.department ??
+          "",
+        values.location ??
+          "",
+        values.salary ??
+          "",
+        values.type ??
+          "",
+        values.benefits ??
+          "",
+        values.contact_info ??
+          "",
+        values.status ??
+          "เปิดรับสมัคร",
+      );
+
+    const newJob =
+      response?.data ??
+      response;
+
+    if (
+      !newJob ||
+      !newJob.ID
+    ) {
+      throw new Error(
+        "Backend ไม่ส่ง ID ของตำแหน่งงานกลับมา",
+      );
+    }
+
+    setEditingJob(
+      newJob,
+    );
+
+    return newJob;
+  }
+
+  // ===================================================
+  // Upload Announcement
+  // ===================================================
+
+  async function handleUpload(
+    file: File,
+  ) {
+    try {
+      setUploading(
+        true,
+      );
+
+      let currentJob =
+        editingJob;
+
+      // -----------------------------------------------
+      // ถ้ายังไม่มี Job ให้สร้างก่อน
+      // -----------------------------------------------
+
+      if (
+        !currentJob ||
+        !currentJob.ID
+      ) {
+        currentJob =
+          await createTemporaryJob();
+
+        message.success(
+          "สร้างตำแหน่งงานชั่วคราวแล้ว",
+        );
+      }
+
+      const jobID =
+        currentJob.ID;
+
+      // -----------------------------------------------
+      // Upload Image
+      // -----------------------------------------------
+
+      const response =
+        await uploadJobAnnouncement(
+          jobID,
+          file,
+        );
+
+      const announcement =
+        response?.data ??
+        response;
+
+      if (
+        !announcement ||
+        !announcement.ID
+      ) {
+        throw new Error(
+          "Backend ไม่ส่ง ID ของประกาศงานกลับมา",
+        );
+      }
+
+      setUploadedAnnouncementID(
+        announcement.ID,
+      );
+
+      message.success(
+        "อัปโหลดรูปประกาศงานสำเร็จ",
+      );
+
+      await loadJobs();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Upload Error:",
+        error,
+      );
+
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "อัปโหลดประกาศงานไม่สำเร็จ";
+
+      message.error(
+        errorMessage,
+      );
+
+      setFileList(
+        [],
+      );
+    } finally {
+      setUploading(
+        false,
+      );
+    }
+  }
+
+  // ===================================================
+  // Upload Props
+  // ===================================================
+
+  const uploadProps:
+    UploadProps = {
+
+    fileList,
+
+    maxCount: 1,
+
+    accept:
+      ".jpg,.jpeg,.png",
+
+    beforeUpload:
+      async (
+        file,
+      ) => {
+
+        setFileList([
+          {
+            uid:
+              file.uid,
+
+            name:
+              file.name,
+
+            status:
+              "uploading",
+
+            originFileObj:
+              file,
+          },
+        ]);
+
+        await handleUpload(
+          file,
+        );
+
+        return false;
+      },
+
+    onRemove: () => {
+      setFileList(
+        [],
+      );
+
+      setUploadedAnnouncementID(
+        null,
+      );
+
+      return true;
+    },
+  };
+
+  // ===================================================
+  // Gemini Analyze
+  // ===================================================
+
+  async function handleAnalyze() {
+    if (
+      !uploadedAnnouncementID
+    ) {
+      message.warning(
+        "กรุณาอัปโหลดรูปประกาศงานก่อน",
+      );
+
+      return;
+    }
+
+    try {
+      setAnalyzing(
+        true,
+      );
+
+      const response =
+        await analyzeJobAnnouncement(
+          uploadedAnnouncementID,
+        );
+
+      // ================================================
+      // Backend Response:
+      //
+      // {
+      //   data: {
+      //     title: "...",
+      //     description: [],
+      //     requirements: [],
+      //     suggested_criteria: []
+      //   },
+      //   message: "Gemini วิเคราะห์และบันทึกเกณฑ์สำเร็จ"
+      // }
+      // ================================================
+
+      const result =
+        response?.data?.data ??
+        response?.data ??
+        response;
+
+      console.log(
+        "Gemini Result:",
+        result,
+      );
+
+      if (
+        !result ||
+        !result.title
+      ) {
+        throw new Error(
+          "ไม่พบข้อมูลผลวิเคราะห์จาก Gemini",
+        );
+      }
+
+      // -----------------------------------------------
+      // เก็บข้อมูลไว้แสดง Preview
+      // -----------------------------------------------
+
+      setGeminiResult(
+        result as GeminiResult,
+      );
+
+      // -----------------------------------------------
+      // นำข้อมูล Gemini ใส่ Form
+      // -----------------------------------------------
+
+      form.setFieldsValue({
+        title:
+          result.title ??
+          "",
+
+        department:
+          result.department ??
+          "",
+
+        location:
+          result.location ??
+          "",
+
+        salary:
+          result.salary ??
+          "",
+
+        type:
+          result.employment_type ??
+          "",
+
+        description:
+          convertToText(
+            result.description,
+          ),
+
+        criteria:
+          convertToText(
+            result.requirements,
+          ),
+      });
+
+      // -----------------------------------------------
+      // เปิด Preview
+      // -----------------------------------------------
+
+      setPreviewOpen(
+        true,
+      );
+
+      message.success(
+        response?.data?.message ??
+        "Gemini วิเคราะห์ประกาศงานสำเร็จ",
+      );
+
+    } catch (
+      error: unknown
+    ) {
+      console.error(
+        "Gemini Analyze Error:",
+        error,
+      );
+
+      let errorMessage =
+        "Gemini วิเคราะห์ประกาศงานไม่สำเร็จ";
+
+      if (
+        error &&
+        typeof error ===
+          "object" &&
+        "response" in error
+      ) {
+        const axiosError =
+          error as {
+            response?: {
+              data?: {
+                error?: string;
+                message?: string;
+              };
+            };
+          };
+
+        errorMessage =
+          axiosError
+            .response
+            ?.data
+            ?.error
+          ??
+          axiosError
+            .response
+            ?.data
+            ?.message
+          ??
+          errorMessage;
+      }
+
+      if (
+        error instanceof Error
+      ) {
+        errorMessage =
+          error.message;
+      }
+
+      message.error(
+        errorMessage,
+      );
+    } finally {
+      setAnalyzing(
+        false,
+      );
+    }
   }
 
   // ===================================================
   // Save Job
   // ===================================================
 
-  async function handleSaveJob() {
+  async function handleSave() {
     try {
       const values =
-        await jobForm.validateFields();
+        await form.validateFields();
 
-      setSavingJob(true);
+      setSaving(
+        true,
+      );
 
-      if (editingJob) {
+      // -----------------------------------------------
+      // ถ้าสร้าง Job ชั่วคราวแล้ว
+      // ให้ Update Job เดิม
+      // -----------------------------------------------
+
+      if (
+        editingJob?.ID
+      ) {
         await updatejob(
           editingJob.ID,
-
           values.title,
-          values.description,
-          values.criteria,
-
-          values.department,
-          values.location,
-          values.salary,
-
-          values.type,
-
-          values.benefits,
-          values.contact_info,
-
-          values.status
+          values.description ??
+            "",
+          values.criteria ??
+            "",
+          values.department ??
+            "",
+          values.location ??
+            "",
+          values.salary ??
+            "",
+          values.type ??
+            "",
+          values.benefits ??
+            "",
+          values.contact_info ??
+            "",
+          values.status ??
+            "เปิดรับสมัคร",
         );
 
-        messageApi.success(
-          "แก้ไขตำแหน่งงานสำเร็จ"
+        message.success(
+          "บันทึกตำแหน่งงานสำเร็จ",
         );
+
       } else {
+
+        // ---------------------------------------------
+        // กรณียังไม่ได้อัปโหลดรูป
+        // ---------------------------------------------
+
         await createjob(
           values.title,
-          values.description,
-          values.criteria,
-
-          values.department,
-          values.location,
-          values.salary,
-
-          values.type,
-
-          values.benefits,
-          values.contact_info,
-
-          values.status
+          values.description ??
+            "",
+          values.criteria ??
+            "",
+          values.department ??
+            "",
+          values.location ??
+            "",
+          values.salary ??
+            "",
+          values.type ??
+            "",
+          values.benefits ??
+            "",
+          values.contact_info ??
+            "",
+          values.status ??
+            "เปิดรับสมัคร",
         );
 
-        messageApi.success(
-          "สร้างตำแหน่งงานสำเร็จ"
+        message.success(
+          "สร้างตำแหน่งงานสำเร็จ",
         );
       }
 
-      setJobModalOpen(false);
+      setModalOpen(
+        false,
+      );
+
+      setPreviewOpen(
+        false,
+      );
+
+      resetModal();
 
       await loadJobs();
-    } catch (error) {
-      console.error(error);
 
-      messageApi.error(
-        "ไม่สามารถบันทึกตำแหน่งงานได้"
+    } catch (
+      error
+    ) {
+      console.error(
+        "Save Error:",
+        error,
+      );
+
+      message.error(
+        "ไม่สามารถบันทึกตำแหน่งงานได้",
       );
     } finally {
-      setSavingJob(false);
+      setSaving(
+        false,
+      );
     }
   }
 
@@ -443,435 +1004,71 @@ export default function PositionsPage() {
   // Delete Job
   // ===================================================
 
-  async function handleDeleteJob(
-    id: number
+  async function handleDelete(
+    id: number,
   ) {
     try {
-      await deletejob(id);
+      await deletejob(
+        id,
+      );
 
-      messageApi.success(
-        "ลบตำแหน่งงานสำเร็จ"
+      message.success(
+        "ลบตำแหน่งงานสำเร็จ",
       );
 
       await loadJobs();
-    } catch (error) {
-      console.error(error);
 
-      messageApi.error(
-        "ไม่สามารถลบตำแหน่งงานได้"
+    } catch (
+      error
+    ) {
+      console.error(
+        "Delete Error:",
+        error,
+      );
+
+      message.error(
+        "ไม่สามารถลบตำแหน่งงานได้",
       );
     }
   }
 
   // ===================================================
-  // Open Detail
-  // ===================================================
-
-  async function openJobDetail(
-    job: JobPosition
-  ) {
-    setSelectedJob(job);
-
-    setDetailModalOpen(true);
-
-    await Promise.all([
-      loadAnnouncements(
-        job.ID
-      ),
-
-      loadCriteria(
-        job.ID
-      ),
-    ]);
-  }
-
-  // ===================================================
-  // Load Announcement
-  // ===================================================
-
-  async function loadAnnouncements(
-    jobId: number
-  ) {
-    try {
-      const response =
-        await getJobAnnouncements(
-          jobId
-        );
-
-      setAnnouncements(
-        response.data ??
-          response ??
-          []
-      );
-    } catch (error) {
-      console.error(error);
-
-      setAnnouncements([]);
-    }
-  }
-
-  // ===================================================
-  // Upload Modal
-  // ===================================================
-
-  function openUploadModal() {
-    setSelectedFile(null);
-
-    setUploadFileList([]);
-
-    setAnnouncementModalOpen(
-      true
-    );
-  }
-
-  // ===================================================
-  // Upload + Analyze
-  // ===================================================
-
-  async function handleUploadAndAnalyze() {
-    if (!selectedJob) {
-      return;
-    }
-
-    if (!selectedFile) {
-      messageApi.warning(
-        "กรุณาเลือกไฟล์ประกาศงาน"
-      );
-
-      return;
-    }
-
-    try {
-      setUploading(true);
-
-      const uploadResponse =
-        await uploadJobAnnouncement(
-          selectedJob.ID,
-          selectedFile
-        );
-
-      const announcement =
-        uploadResponse.data ??
-        uploadResponse;
-
-      const announcementId =
-        announcement.ID ??
-        announcement.id;
-
-      if (!announcementId) {
-        throw new Error(
-          "ไม่พบ ID ของประกาศงาน"
-        );
-      }
-
-      setUploading(false);
-
-      setAnalyzing(true);
-
-      const analyzeResponse =
-        await analyzeJobAnnouncement(
-          announcementId
-        );
-
-      const result =
-        analyzeResponse.data ??
-        analyzeResponse;
-
-      setAnalysisResult(
-        result
-      );
-
-      setAnnouncementModalOpen(
-        false
-      );
-
-      setAnalysisModalOpen(
-        true
-      );
-
-      messageApi.success(
-        "Gemini วิเคราะห์ประกาศงานสำเร็จ"
-      );
-
-      await Promise.all([
-        loadAnnouncements(
-          selectedJob.ID
-        ),
-
-        loadCriteria(
-          selectedJob.ID
-        ),
-      ]);
-    } catch (error: any) {
-      console.error(error);
-
-      const errorMessage =
-        error?.response
-          ?.data
-          ?.error ??
-        "อัปโหลดหรือวิเคราะห์ประกาศไม่สำเร็จ";
-
-      messageApi.error(
-        errorMessage
-      );
-    } finally {
-      setUploading(false);
-
-      setAnalyzing(false);
-    }
-  }
-
-  // ===================================================
-  // Delete Announcement
-  // ===================================================
-
-  async function handleDeleteAnnouncement(
-    announcementId: number
-  ) {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      await deleteJobAnnouncement(
-        announcementId
-      );
-
-      messageApi.success(
-        "ลบประกาศงานสำเร็จ"
-      );
-
-      await loadAnnouncements(
-        selectedJob.ID
-      );
-    } catch (error) {
-      console.error(error);
-
-      messageApi.error(
-        "ไม่สามารถลบประกาศงานได้"
-      );
-    }
-  }
-
-  // ===================================================
-  // Criteria
-  // ===================================================
-
-  async function loadCriteria(
-    jobId: number
-  ) {
-    try {
-      setLoadingCriteria(true);
-
-      const response =
-        await getJobCriteria(
-          jobId
-        );
-
-      setCriteria(
-        response.data ??
-          response ??
-          []
-      );
-    } catch (error) {
-      console.error(error);
-
-      setCriteria([]);
-    } finally {
-      setLoadingCriteria(false);
-    }
-  }
-
-  // ===================================================
-  // Open Create Criteria
-  // ===================================================
-
-  function openCreateCriteria() {
-    setEditingCriteria(
-      null
-    );
-
-    criteriaForm.resetFields();
-
-    criteriaForm.setFieldsValue({
-      name: "",
-      description: "",
-      weight: 0,
-      is_required: false,
-    });
-
-    setCriteriaModalOpen(
-      true
-    );
-  }
-
-  // ===================================================
-  // Open Edit Criteria
-  // ===================================================
-
-  function openEditCriteria(
-    item: JobCriteria
-  ) {
-    setEditingCriteria(
-      item
-    );
-
-    criteriaForm.setFieldsValue({
-      name: item.name,
-
-      description:
-        item.description,
-
-      weight:
-        item.weight,
-
-      is_required:
-        item.is_required,
-    });
-
-    setCriteriaModalOpen(
-      true
-    );
-  }
-
-  // ===================================================
-  // Save Criteria
-  // ===================================================
-
-  async function handleSaveCriteria() {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      const values =
-        await criteriaForm.validateFields();
-
-      setSavingCriteria(
-        true
-      );
-
-      if (editingCriteria) {
-        await updateJobCriteria(
-          editingCriteria.ID,
-          values
-        );
-
-        messageApi.success(
-          "แก้ไขเกณฑ์สำเร็จ"
-        );
-      } else {
-        await createJobCriteria(
-          selectedJob.ID,
-          values
-        );
-
-        messageApi.success(
-          "เพิ่มเกณฑ์สำเร็จ"
-        );
-      }
-
-      setCriteriaModalOpen(
-        false
-      );
-
-      await loadCriteria(
-        selectedJob.ID
-      );
-    } catch (error) {
-      console.error(error);
-
-      messageApi.error(
-        "ไม่สามารถบันทึกเกณฑ์ได้"
-      );
-    } finally {
-      setSavingCriteria(
-        false
-      );
-    }
-  }
-
-  // ===================================================
-  // Delete Criteria
-  // ===================================================
-
-  async function handleDeleteCriteria(
-    criteriaId: number
-  ) {
-    if (!selectedJob) {
-      return;
-    }
-
-    try {
-      await deleteJobCriteria(
-        criteriaId
-      );
-
-      messageApi.success(
-        "ลบเกณฑ์สำเร็จ"
-      );
-
-      await loadCriteria(
-        selectedJob.ID
-      );
-    } catch (error) {
-      console.error(error);
-
-      messageApi.error(
-        "ไม่สามารถลบเกณฑ์ได้"
-      );
-    }
-  }
-
-  // ===================================================
-  // Weight
-  // ===================================================
-
-  const totalWeight =
-    criteria.reduce(
-      (total, item) =>
-        total +
-        Number(
-          item.weight ?? 0
-        ),
-      0
-    );
-
-  // ===================================================
-  // Table
+  // Table Columns
   // ===================================================
 
   const columns = [
-    {
-      title: "ตำแหน่งงาน",
-
-      dataIndex: "title",
-
-      key: "title",
-
-      render: (
-        value: string
-      ) => (
-        <Text strong>
-          {value}
-        </Text>
-      ),
-    },
 
     {
-      title: "แผนก",
-
-      dataIndex:
-        "department",
+      title:
+        "ตำแหน่งงาน",
 
       key:
-        "department",
+        "title",
 
       render: (
-        value: string
-      ) =>
-        value ||
-        "-",
+        _: unknown,
+        record: JobPosition,
+      ) => (
+        <Space
+          direction="vertical"
+          size={0}
+        >
+          <Text strong>
+            {
+              record.title
+            }
+          </Text>
+
+          <Text
+            type="secondary"
+          >
+            {
+              record.department ||
+              "-"
+            }
+          </Text>
+        </Space>
+      ),
     },
 
     {
@@ -885,7 +1082,28 @@ export default function PositionsPage() {
         "location",
 
       render: (
-        value: string
+        value:
+          | string
+          | undefined,
+      ) =>
+        value ||
+        "-",
+    },
+
+    {
+      title:
+        "ประเภท",
+
+      dataIndex:
+        "type",
+
+      key:
+        "type",
+
+      render: (
+        value:
+          | string
+          | undefined,
       ) =>
         value ||
         "-",
@@ -902,18 +1120,22 @@ export default function PositionsPage() {
         "status",
 
       render: (
-        value: string
+        value:
+          | string
+          | undefined,
       ) => (
         <Tag
           color={
             value ===
             "เปิดรับสมัคร"
               ? "green"
-              : "default"
+              : "red"
           }
         >
-          {value ||
-            "ไม่ระบุ"}
+          {
+            value ||
+            "-"
+          }
         </Tag>
       ),
     },
@@ -925,47 +1147,64 @@ export default function PositionsPage() {
       key:
         "action",
 
-      width:
-        220,
-
       render: (
         _: unknown,
-        record: JobPosition
+        record: JobPosition,
       ) => (
-        <Space>
+        <Space
+          wrap
+        >
+
           <Button
-            type="primary"
             icon={
               <EyeOutlined />
             }
             onClick={() =>
-              openJobDetail(
-                record
+              openEditModal(
+                record,
               )
             }
           >
-            รายละเอียด
+            ดู / แก้ไข
           </Button>
 
           <Button
+            type="primary"
             icon={
-              <EditOutlined />
+              <SettingOutlined />
             }
-            onClick={() =>
-              openEditJob(
-                record
-              )
-            }
-          />
+            onClick={() => {
+
+              if (
+                !record.ID
+              ) {
+                message.error(
+                  "ไม่พบ ID ของตำแหน่งงาน",
+                );
+
+                return;
+              }
+
+              setSelectedJobId(
+                record.ID,
+              );
+
+              setCriteriaModalOpen(
+                true,
+              );
+            }}
+          >
+            จัดการเกณฑ์
+          </Button>
 
           <Popconfirm
-            title="ยืนยันการลบ"
-            description="ต้องการลบตำแหน่งงานนี้หรือไม่?"
+            title="ยืนยันการลบตำแหน่งงาน"
+            description="ข้อมูลตำแหน่งงานและข้อมูลที่เกี่ยวข้องอาจถูกลบ"
             okText="ลบ"
             cancelText="ยกเลิก"
             onConfirm={() =>
-              handleDeleteJob(
-                record.ID
+              handleDelete(
+                record.ID,
               )
             }
           >
@@ -974,1141 +1213,975 @@ export default function PositionsPage() {
               icon={
                 <DeleteOutlined />
               }
-            />
+            >
+              ลบ
+            </Button>
           </Popconfirm>
+
         </Space>
       ),
     },
   ];
 
   // ===================================================
-  // UI
+  // Render
   // ===================================================
 
   return (
-    <>
-      {contextHolder}
+    <div
+      style={{
+        padding:
+          24,
+      }}
+    >
 
-      <div
-        style={{
-          padding: 24,
-        }}
+      {/* Header */}
+
+      <Row
+        justify="space-between"
+        align="middle"
+        gutter={[
+          16,
+          16,
+        ]}
       >
-        <Card>
-          <Row
-            gutter={[
-              16,
-              16,
-            ]}
-            align="middle"
-          >
-            <Col
-              xs={24}
-              md={14}
-            >
-              <Title
-                level={2}
-                style={{
-                  margin: 0,
-                }}
-              >
-                จัดการตำแหน่งงาน
-              </Title>
 
-              <Text
-                type="secondary"
-              >
-                สร้างตำแหน่งงาน
-                อัปโหลดประกาศ
-                วิเคราะห์ด้วย
-                Gemini
-                และจัดการเกณฑ์ประเมิน
-              </Text>
-            </Col>
+        <Col>
 
-            <Col
-              xs={24}
-              md={10}
-              style={{
-                textAlign:
-                  "right",
-              }}
-            >
-              <Button
-                type="primary"
-                size="large"
-                icon={
-                  <PlusOutlined />
-                }
-                onClick={
-                  openCreateJob
-                }
-              >
-                เพิ่มตำแหน่งงาน
-              </Button>
-            </Col>
-          </Row>
-
-          <Divider />
-
-          <Row
-            gutter={16}
-          >
-            <Col
-              xs={24}
-              md={8}
-            >
-              <Statistic
-                title="ตำแหน่งงานทั้งหมด"
-                value={
-                  jobs.length
-                }
-              />
-            </Col>
-
-            <Col
-              xs={24}
-              md={8}
-            >
-              <Statistic
-                title="เปิดรับสมัคร"
-                value={
-                  jobs.filter(
-                    (job) =>
-                      job.status ===
-                      "เปิดรับสมัคร"
-                  ).length
-                }
-              />
-            </Col>
-
-            <Col
-              xs={24}
-              md={8}
-            >
-              <Statistic
-                title="ปิดรับสมัคร"
-                value={
-                  jobs.filter(
-                    (job) =>
-                      job.status ===
-                      "ปิดรับสมัคร"
-                  ).length
-                }
-              />
-            </Col>
-          </Row>
-
-          <Divider />
-
-          <Input
-            size="large"
-            prefix={
-              <SearchOutlined />
-            }
-            placeholder="ค้นหาชื่อตำแหน่ง แผนก หรือสถานที่"
-            value={
-              searchText
-            }
-            onChange={(
-              event
-            ) =>
-              setSearchText(
-                event
-                  .target
-                  .value
-              )
-            }
+          <Title
+            level={2}
             style={{
-              maxWidth: 500,
-              marginBottom: 20,
+              marginBottom:
+                4,
             }}
-          />
+          >
+            จัดการตำแหน่งงาน
+          </Title>
 
-          <Table
-            rowKey="ID"
-            columns={
-              columns
-            }
-            dataSource={
-              filteredJobs
-            }
-            loading={
-              loadingJobs
-            }
-            pagination={{
-              pageSize: 8,
-            }}
-            scroll={{
-              x: 900,
-            }}
-          />
-        </Card>
-      </div>
+          <Text
+            type="secondary"
+          >
+            อัปโหลดประกาศงาน
+            {" → "}
+            Gemini วิเคราะห์
+            {" → "}
+            HR ตรวจสอบ
+            {" → "}
+            กำหนดเกณฑ์คะแนน
+          </Text>
 
-      {/* ============================================ */}
-      {/* Job Modal */}
-      {/* ============================================ */}
+        </Col>
+
+        <Col>
+
+          <Button
+            type="primary"
+            size="large"
+            icon={
+              <PlusOutlined />
+            }
+            onClick={
+              openCreateModal
+            }
+          >
+            สร้างตำแหน่งงาน
+          </Button>
+
+        </Col>
+
+      </Row>
+
+      <Divider />
+
+      {/* Statistics */}
+
+      <Row
+        gutter={16}
+      >
+
+        <Col
+          xs={24}
+          md={8}
+        >
+          <Card>
+
+            <Statistic
+              title="ตำแหน่งงานทั้งหมด"
+              value={
+                statistics.total
+              }
+            />
+
+          </Card>
+        </Col>
+
+        <Col
+          xs={24}
+          md={8}
+        >
+          <Card>
+
+            <Statistic
+              title="กำลังเปิดรับ"
+              value={
+                statistics.opened
+              }
+            />
+
+          </Card>
+        </Col>
+
+        <Col
+          xs={24}
+          md={8}
+        >
+          <Card>
+
+            <Statistic
+              title="ปิดรับสมัคร"
+              value={
+                statistics.closed
+              }
+            />
+
+          </Card>
+        </Col>
+
+      </Row>
+
+      <Divider />
+
+      {/* Job Table */}
+
+      <Card>
+
+        <Table
+          rowKey="ID"
+          loading={
+            loading
+          }
+          columns={
+            columns
+          }
+          dataSource={
+            jobs
+          }
+          scroll={{
+            x:
+              1000,
+          }}
+          locale={{
+            emptyText: (
+              <Empty
+                description="ยังไม่มีตำแหน่งงาน"
+              />
+            ),
+          }}
+        />
+
+      </Card>
+
+      {/* ================================================= */}
+      {/* Create / Edit Modal */}
+      {/* ================================================= */}
 
       <Modal
         title={
           editingJob
             ? "แก้ไขตำแหน่งงาน"
-            : "เพิ่มตำแหน่งงาน"
+            : "สร้างตำแหน่งงานใหม่"
         }
         open={
-          jobModalOpen
+          modalOpen
         }
-        onCancel={() =>
-          setJobModalOpen(
-            false
-          )
+        width={
+          1100
         }
-        onOk={
-          handleSaveJob
-        }
-        confirmLoading={
-          savingJob
-        }
-        okText="บันทึก"
-        cancelText="ยกเลิก"
-        width={850}
+        destroyOnClose
+        onCancel={() => {
+          setModalOpen(
+            false,
+          );
+
+          resetModal();
+        }}
+        footer={[
+
+          <Button
+            key="cancel"
+            onClick={() => {
+              setModalOpen(
+                false,
+              );
+
+              resetModal();
+            }}
+          >
+            ยกเลิก
+          </Button>,
+
+          <Button
+            key="save"
+            type="primary"
+            loading={
+              saving
+            }
+            icon={
+              <SaveOutlined />
+            }
+            onClick={
+              handleSave
+            }
+          >
+            บันทึกตำแหน่งงาน
+          </Button>,
+
+        ]}
       >
+
         <Form
           form={
-            jobForm
+            form
           }
           layout="vertical"
         >
-          <Row
-            gutter={16}
+
+          {/* Step 1 */}
+
+          <Card
+            size="small"
+            title="ขั้นที่ 1: ข้อมูลเบื้องต้น"
           >
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="title"
-                label="ชื่อตำแหน่ง"
-                rules={[
-                  {
-                    required:
-                      true,
 
-                    message:
-                      "กรุณาระบุชื่อตำแหน่ง",
-                  },
-                ]}
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="department"
-                label="แผนก"
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row
-            gutter={16}
-          >
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="location"
-                label="สถานที่ทำงาน"
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="salary"
-                label="เงินเดือน"
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row
-            gutter={16}
-          >
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="type"
-                label="ประเภทงาน"
-              >
-                <Input />
-              </Form.Item>
-            </Col>
-
-            <Col
-              xs={24}
-              md={12}
-            >
-              <Form.Item
-                name="status"
-                label="สถานะ"
-              >
-                <Select
-                  options={[
-                    {
-                      label:
-                        "เปิดรับสมัคร",
-
-                      value:
-                        "เปิดรับสมัคร",
-                    },
-
-                    {
-                      label:
-                        "ปิดรับสมัคร",
-
-                      value:
-                        "ปิดรับสมัคร",
-                    },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item
-            name="description"
-            label="รายละเอียดงาน"
-          >
-            <TextArea
-              rows={4}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="criteria"
-            label="คุณสมบัติหรือเกณฑ์เบื้องต้น"
-          >
-            <TextArea
-              rows={4}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="benefits"
-            label="สวัสดิการ"
-          >
-            <TextArea
-              rows={3}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="contact_info"
-            label="ข้อมูลติดต่อ"
-          >
-            <TextArea
-              rows={2}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* ============================================ */}
-      {/* Job Detail */}
-      {/* ============================================ */}
-
-      <Modal
-        title={
-          selectedJob
-            ? `รายละเอียด: ${selectedJob.title}`
-            : "รายละเอียดตำแหน่ง"
-        }
-        open={
-          detailModalOpen
-        }
-        onCancel={() =>
-          setDetailModalOpen(
-            false
-          )
-        }
-        footer={null}
-        width={1200}
-      >
-        {selectedJob && (
-          <>
             <Row
               gutter={16}
             >
+
               <Col
                 xs={24}
-                lg={10}
+                md={12}
               >
-                <Card
-                  title="ข้อมูลตำแหน่งงาน"
+
+                <Form.Item
+                  label="ชื่อตำแหน่งงาน"
+                  name="title"
+                  rules={[
+                    {
+                      required:
+                        true,
+
+                      message:
+                        "กรุณาระบุชื่อตำแหน่งงาน",
+                    },
+                  ]}
                 >
-                  <Paragraph>
-                    <Text strong>
-                      แผนก:
-                    </Text>{" "}
-                    {selectedJob.department ||
-                      "-"}
-                  </Paragraph>
 
-                  <Paragraph>
-                    <Text strong>
-                      สถานที่:
-                    </Text>{" "}
-                    {selectedJob.location ||
-                      "-"}
-                  </Paragraph>
+                  <Input
+                    placeholder="เช่น Software Test Engineer"
+                  />
 
-                  <Paragraph>
-                    <Text strong>
-                      เงินเดือน:
-                    </Text>{" "}
-                    {selectedJob.salary ||
-                      "-"}
-                  </Paragraph>
+                </Form.Item>
 
-                  <Paragraph>
-                    <Text strong>
-                      รายละเอียด:
-                    </Text>
-                  </Paragraph>
-
-                  <Paragraph>
-                    {selectedJob.description ||
-                      "-"}
-                  </Paragraph>
-
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={
-                      <UploadOutlined />
-                    }
-                    onClick={
-                      openUploadModal
-                    }
-                    block
-                  >
-                    อัปโหลดประกาศงาน
-                    และวิเคราะห์ด้วย
-                    Gemini
-                  </Button>
-                </Card>
-
-                <Card
-                  title="ไฟล์ประกาศงาน"
-                  style={{
-                    marginTop: 16,
-                  }}
-                >
-                  {announcements.length ===
-                  0 ? (
-                    <Empty
-                      description="ยังไม่มีไฟล์ประกาศ"
-                    />
-                  ) : (
-                    <List
-                      dataSource={
-                        announcements
-                      }
-                      renderItem={(
-                        item
-                      ) => (
-                        <List.Item
-                          actions={[
-                            <Popconfirm
-                              key="delete"
-                              title="ลบไฟล์ประกาศ?"
-                              onConfirm={() =>
-                                handleDeleteAnnouncement(
-                                  item.ID
-                                )
-                              }
-                            >
-                              <Button
-                                danger
-                                icon={
-                                  <DeleteOutlined />
-                                }
-                              />
-                            </Popconfirm>,
-                          ]}
-                        >
-                          <List.Item.Meta
-                            avatar={
-                              <FileImageOutlined />
-                            }
-                            title={
-                              item.file_name
-                            }
-                            description={
-                              item.status ||
-                              "อัปโหลดแล้ว"
-                            }
-                          />
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </Card>
               </Col>
 
               <Col
                 xs={24}
-                lg={14}
+                md={12}
               >
+
+                <Form.Item
+                  label="แผนก"
+                  name="department"
+                >
+
+                  <Input />
+
+                </Form.Item>
+
+              </Col>
+
+              <Col
+                xs={24}
+                md={12}
+              >
+
+                <Form.Item
+                  label="สถานที่ทำงาน"
+                  name="location"
+                >
+
+                  <Input />
+
+                </Form.Item>
+
+              </Col>
+
+              <Col
+                xs={24}
+                md={12}
+              >
+
+                <Form.Item
+                  label="เงินเดือน"
+                  name="salary"
+                >
+
+                  <Input />
+
+                </Form.Item>
+
+              </Col>
+
+              <Col
+                xs={24}
+                md={12}
+              >
+
+                <Form.Item
+                  label="ประเภทการจ้าง"
+                  name="type"
+                >
+
+                  <Select
+                    placeholder="เลือกประเภท"
+                    options={[
+                      {
+                        label:
+                          "งานประจำ",
+
+                        value:
+                          "งานประจำ",
+                      },
+
+                      {
+                        label:
+                          "สัญญาจ้าง",
+
+                        value:
+                          "สัญญาจ้าง",
+                      },
+
+                      {
+                        label:
+                          "ฝึกงาน",
+
+                        value:
+                          "ฝึกงาน",
+                      },
+                    ]}
+                  />
+
+                </Form.Item>
+
+              </Col>
+
+              <Col
+                xs={24}
+                md={12}
+              >
+
+                <Form.Item
+                  label="สถานะ"
+                  name="status"
+                >
+
+                  <Select
+                    options={[
+                      {
+                        label:
+                          "เปิดรับสมัคร",
+
+                        value:
+                          "เปิดรับสมัคร",
+                      },
+
+                      {
+                        label:
+                          "ปิดรับสมัครแล้ว",
+
+                        value:
+                          "ปิดรับสมัครแล้ว",
+                      },
+                    ]}
+                  />
+
+                </Form.Item>
+
+              </Col>
+
+            </Row>
+
+          </Card>
+
+          <Divider />
+
+          {/* Step 2 */}
+
+          <Card
+            size="small"
+            title="ขั้นที่ 2: อัปโหลดรูปประกาศงาน"
+          >
+
+            <Paragraph
+              type="secondary"
+            >
+              รองรับไฟล์ JPG, JPEG และ PNG
+              กรุณาระบุชื่อตำแหน่งงานก่อนอัปโหลด
+            </Paragraph>
+
+            <Upload
+              {...uploadProps}
+            >
+
+              <Button
+                loading={
+                  uploading
+                }
+                icon={
+                  <UploadOutlined />
+                }
+              >
+                เลือกรูปประกาศงาน
+              </Button>
+                 {
+                uploadedAnnouncementID && (
+                  <Tag
+                    color="green"
+                  >
+                    อัปโหลดสำเร็จ
+                  </Tag>
+                )
+              }
+
+            </Upload>
+            
+
+            <Space
+              style={{
+                marginTop:
+                  16,
+              }}
+              wrap
+            >
+
+              <Button
+                type="primary"
+                icon={
+                  <RobotOutlined />
+                }
+                loading={
+                  analyzing
+                }
+                disabled={
+                  !uploadedAnnouncementID
+                }
+                onClick={
+                  handleAnalyze
+                }
+              >
+                Gemini วิเคราะห์ประกาศงาน
+              </Button>
+
+            </Space>
+
+          </Card>
+
+          <Divider />
+
+          {/* Step 3 */}
+
+          <Card
+            size="small"
+            title="ขั้นที่ 3: ตรวจสอบและแก้ไขข้อมูล"
+          >
+
+            <Form.Item
+              label="รายละเอียดงาน"
+              name="description"
+            >
+
+              <TextArea
+                rows={7}
+                placeholder="Gemini จะนำรายละเอียดงานมาใส่ให้อัตโนมัติ"
+              />
+
+            </Form.Item>
+
+            <Form.Item
+              label="คุณสมบัติที่ต้องการ"
+              name="criteria"
+            >
+
+              <TextArea
+                rows={7}
+                placeholder="Gemini จะนำคุณสมบัติผู้สมัครมาใส่ให้อัตโนมัติ"
+              />
+
+            </Form.Item>
+
+            <Form.Item
+              label="สวัสดิการ"
+              name="benefits"
+            >
+
+              <TextArea
+                rows={3}
+              />
+
+            </Form.Item>
+
+            <Form.Item
+              label="ข้อมูลติดต่อ"
+              name="contact_info"
+            >
+
+              <TextArea
+                rows={3}
+              />
+
+            </Form.Item>
+
+          </Card>
+
+          {/* Gemini Suggested Criteria */}
+
+          {
+            geminiResult && (
+              <>
+                <Divider />
+
                 <Card
-                  title="เกณฑ์ประเมินผู้สมัคร"
-                  extra={
-                    <Button
-                      type="primary"
-                      icon={
-                        <PlusOutlined />
-                      }
-                      onClick={
-                        openCreateCriteria
-                      }
-                    >
-                      เพิ่มเกณฑ์
-                    </Button>
+                  title={
+                    <Space>
+
+                      <RobotOutlined />
+
+                      <span>
+                        เกณฑ์ที่ Gemini วิเคราะห์
+                      </span>
+
+                    </Space>
                   }
                 >
-                  <Alert
-                    type={
-                      totalWeight ===
-                      100
-                        ? "success"
-                        : "warning"
-                    }
-                    showIcon
-                    message={`น้ำหนักรวม ${totalWeight}%`}
-                    description={
-                      totalWeight ===
-                      100
-                        ? "น้ำหนักรวมถูกต้อง พร้อมใช้วิเคราะห์ Resume"
-                        : "ควรปรับน้ำหนักรวมให้เท่ากับ 100%"
-                    }
-                    style={{
-                      marginBottom: 16,
-                    }}
-                  />
 
-                  <Progress
-                    percent={
-                      Math.min(
-                        totalWeight,
-                        100
-                      )
+                  <Paragraph
+                    type="secondary"
+                  >
+                    Gemini ได้บันทึกเกณฑ์หลักลงฐานข้อมูลแล้ว
+                    หลังบันทึกตำแหน่งงาน
+                    ให้กดปุ่ม “จัดการเกณฑ์”
+                    เพื่อเพิ่มตัวเลือกและกำหนดคะแนน
+                  </Paragraph>
+
+                  <List
+                    bordered
+                    dataSource={
+                      geminiResult
+                        .suggested_criteria ??
+                      []
                     }
-                    status={
-                      totalWeight ===
-                      100
-                        ? "success"
-                        : "active"
-                    }
-                    style={{
-                      marginBottom: 16,
-                    }}
-                  />
+                    renderItem={(
+                      item,
+                      index,
+                    ) => (
 
-                  {loadingCriteria ? (
-                    <div
-                      style={{
-                        textAlign:
-                          "center",
+                      <List.Item>
 
-                        padding: 40,
-                      }}
-                    >
-                      <Spin />
-                    </div>
-                  ) : criteria.length ===
-                    0 ? (
-                    <Empty
-                      description="ยังไม่มีเกณฑ์ประเมิน"
-                    />
-                  ) : (
-                    <List
-                      dataSource={
-                        criteria
-                      }
-                      renderItem={(
-                        item
-                      ) => (
-                        <List.Item
-                          actions={[
-                            <Button
-                              key="edit"
-                              icon={
-                                <EditOutlined />
-                              }
-                              onClick={() =>
-                                openEditCriteria(
-                                  item
-                                )
-                              }
-                            />,
+                        <List.Item.Meta
+                          title={
+                            <Space>
 
-                            <Popconfirm
-                              key="delete"
-                              title="ลบเกณฑ์นี้?"
-                              onConfirm={() =>
-                                handleDeleteCriteria(
-                                  item.ID
-                                )
-                              }
-                            >
-                              <Button
-                                danger
-                                icon={
-                                  <DeleteOutlined />
+                              <Text strong>
+
+                                {
+                                  index + 1
                                 }
-                              />
-                            </Popconfirm>,
-                          ]}
-                        >
-                          <List.Item.Meta
-                            title={
-                              <Space>
-                                <Text
-                                  strong
-                                >
-                                  {
-                                    item.name
-                                  }
-                                </Text>
+                                .{" "}
+                                {
+                                  item.name
+                                }
 
-                                <Tag
-                                  color="blue"
-                                >
-                                  {
-                                    item.weight
-                                  }
-                                  %
-                                </Tag>
+                              </Text>
 
-                                {item.is_required && (
-                                  <Tag
-                                    color="red"
-                                  >
-                                    จำเป็น
-                                  </Tag>
-                                )}
-                              </Space>
-                            }
-                            description={
-                              item.description
-                            }
-                          />
-                        </List.Item>
-                      )}
-                    />
-                  )}
+                              <Tag
+                                color="blue"
+                              >
+
+                                น้ำหนัก{" "}
+                                {
+                                  item.weight
+                                }
+                                %
+
+                              </Tag>
+
+                            </Space>
+                          }
+                          description={
+                            item.description
+                          }
+                        />
+
+                      </List.Item>
+
+                    )}
+                  />
+
                 </Card>
-              </Col>
-            </Row>
-          </>
-        )}
-      </Modal>
-
-      {/* ============================================ */}
-      {/* Upload Modal */}
-      {/* ============================================ */}
-
-      <Modal
-        title="อัปโหลดประกาศงาน"
-        open={
-          announcementModalOpen
-        }
-        onCancel={() =>
-          setAnnouncementModalOpen(
-            false
-          )
-        }
-        onOk={
-          handleUploadAndAnalyze
-        }
-        confirmLoading={
-          uploading ||
-          analyzing
-        }
-        okText={
-          analyzing
-            ? "Gemini กำลังวิเคราะห์..."
-            : uploading
-            ? "กำลังอัปโหลด..."
-            : "อัปโหลดและวิเคราะห์"
-        }
-        cancelText="ยกเลิก"
-      >
-        <Alert
-          type="info"
-          showIcon
-          message="รองรับ JPG, JPEG และ PNG"
-          description="ระบบจะส่งรูปประกาศไปให้ Gemini วิเคราะห์ และบันทึกเกณฑ์ประเมินลงฐานข้อมูล"
-          style={{
-            marginBottom: 16,
-          }}
-        />
-
-        <Upload
-          accept=".jpg,.jpeg,.png"
-          maxCount={1}
-          fileList={
-            uploadFileList
+              </>
+            )
           }
-          beforeUpload={(
-            file
-          ) => {
-            const allowed =
-              [
-                "image/jpeg",
-                "image/png",
-              ].includes(
-                file.type
-              );
 
-            if (!allowed) {
-              messageApi.error(
-                "รองรับเฉพาะ JPG, JPEG และ PNG"
-              );
+        </Form>
 
-              return Upload.LIST_IGNORE;
-            }
-
-            setSelectedFile(
-              file
-            );
-
-            setUploadFileList(
-              [
-                {
-                  uid:
-                    file.uid,
-
-                  name:
-                    file.name,
-
-                  status:
-                    "done",
-                },
-              ]
-            );
-
-            return false;
-          }}
-          onRemove={() => {
-            setSelectedFile(
-              null
-            );
-
-            setUploadFileList(
-              []
-            );
-          }}
-        >
-          <Button
-            icon={
-              <UploadOutlined />
-            }
-            block
-          >
-            เลือกรูปประกาศงาน
-          </Button>
-        </Upload>
-
-        {(uploading ||
-          analyzing) && (
-          <div
-            style={{
-              textAlign:
-                "center",
-
-              marginTop: 24,
-            }}
-          >
-            <Spin
-              size="large"
-            />
-
-            <div
-              style={{
-                marginTop: 12,
-              }}
-            >
-              {analyzing
-                ? "Gemini กำลังอ่านและวิเคราะห์ประกาศ..."
-                : "กำลังอัปโหลดไฟล์..."}
-            </div>
-          </div>
-        )}
       </Modal>
 
-      {/* ============================================ */}
-      {/* Gemini Result */}
-      {/* ============================================ */}
+      {/* ================================================= */}
+      {/* Gemini Preview */}
+      {/* ================================================= */}
 
       <Modal
         title={
           <Space>
+
             <RobotOutlined />
-            ผลการวิเคราะห์จาก
-            Gemini
+
+            Gemini Analysis Preview
+
           </Space>
         }
         open={
-          analysisModalOpen
+          previewOpen
+        }
+        width={
+          1000
         }
         onCancel={() =>
-          setAnalysisModalOpen(
-            false
+          setPreviewOpen(
+            false,
           )
         }
-        footer={
+        footer={[
+
           <Button
+            key="back"
+            onClick={() =>
+              setPreviewOpen(
+                false,
+              )
+            }
+          >
+            กลับไปแก้ไข
+          </Button>,
+
+          <Button
+            key="confirm"
             type="primary"
             icon={
               <SaveOutlined />
             }
-            onClick={() =>
-              setAnalysisModalOpen(
-                false
-              )
-            }
+            onClick={() => {
+
+              setPreviewOpen(
+                false,
+              );
+
+              message.info(
+                "ตรวจสอบข้อมูลในฟอร์ม แล้วกดบันทึกตำแหน่งงาน",
+              );
+            }}
           >
-            ปิดและดูเกณฑ์ที่บันทึก
-          </Button>
-        }
-        width={1100}
+            ยืนยันข้อมูล
+          </Button>,
+
+        ]}
       >
-        {analysisResult && (
-          <>
-            <Row
-              gutter={16}
-            >
-              <Col
-                xs={24}
-                md={12}
-              >
-                <Card
-                  size="small"
-                  title="ข้อมูลตำแหน่ง"
+
+        {
+          geminiResult
+            ? (
+              <>
+
+                <Descriptions
+                  bordered
+                  column={2}
                 >
-                  <Paragraph>
-                    <Text strong>
-                      ตำแหน่ง:
-                    </Text>{" "}
-                    {
-                      analysisResult.title
-                    }
-                  </Paragraph>
 
-                  <Paragraph>
-                    <Text strong>
-                      แผนก:
-                    </Text>{" "}
-                    {
-                      analysisResult.department ||
-                        "-"
-                    }
-                  </Paragraph>
+                  <Descriptions.Item
+                    label="ตำแหน่งงาน"
+                  >
 
-                  <Paragraph>
-                    <Text strong>
-                      สถานที่:
-                    </Text>{" "}
                     {
-                      analysisResult.location ||
-                        "-"
+                      geminiResult.title ||
+                      "-"
                     }
-                  </Paragraph>
 
-                  <Paragraph>
-                    <Text strong>
-                      ประเภทงาน:
-                    </Text>{" "}
+                  </Descriptions.Item>
+
+                  <Descriptions.Item
+                    label="สถานที่"
+                  >
+
                     {
-                      analysisResult.employment_type ||
-                        "-"
+                      geminiResult.location ||
+                      "-"
                     }
-                  </Paragraph>
-                </Card>
-              </Col>
 
-              <Col
-                xs={24}
-                md={12}
-              >
-                <Card
-                  size="small"
-                  title="คุณสมบัติ"
+                  </Descriptions.Item>
+
+                  <Descriptions.Item
+                    label="แผนก"
+                  >
+
+                    {
+                      geminiResult.department ||
+                      "-"
+                    }
+
+                  </Descriptions.Item>
+
+                  <Descriptions.Item
+                    label="ประเภทงาน"
+                  >
+
+                    {
+                      geminiResult
+                        .employment_type ||
+                      "-"
+                    }
+
+                  </Descriptions.Item>
+
+                </Descriptions>
+
+                <Divider />
+
+                <Title
+                  level={5}
                 >
-                  <Paragraph>
-                    <Text strong>
-                      การศึกษา:
-                    </Text>{" "}
-                    {
-                      analysisResult.education ||
-                        "-"
-                    }
-                  </Paragraph>
+                  Technical Skills
+                </Title>
 
-                  <Paragraph>
-                    <Text strong>
-                      ประสบการณ์:
-                    </Text>{" "}
-                    {
-                      analysisResult.experience ||
-                        "-"
-                    }
-                  </Paragraph>
-                </Card>
-              </Col>
-            </Row>
-
-            <Divider />
-
-            <Row
-              gutter={16}
-            >
-              <Col
-                xs={24}
-                md={12}
-              >
-                <Card
-                  size="small"
-                  title="Technical Skills"
+                <Space
+                  wrap
                 >
-                  {analysisResult
-                    .technical_skills
-                    .map(
+
+                  {
+                    convertToArray(
+                      geminiResult
+                        .technical_skills,
+                    ).map(
                       (
-                        skill
+                        skill,
                       ) => (
+
                         <Tag
-                          key={
-                            skill
-                          }
                           color="blue"
-                          style={{
-                            marginBottom: 8,
-                          }}
-                        >
-                          {
-                            skill
-                          }
-                        </Tag>
-                      )
-                    )}
-                </Card>
-              </Col>
-
-              <Col
-                xs={24}
-                md={12}
-              >
-                <Card
-                  size="small"
-                  title="Soft Skills"
-                >
-                  {analysisResult
-                    .soft_skills
-                    .map(
-                      (
-                        skill
-                      ) => (
-                        <Tag
                           key={
                             skill
                           }
-                          color="green"
-                          style={{
-                            marginBottom: 8,
-                          }}
                         >
+
                           {
                             skill
                           }
+
                         </Tag>
-                      )
-                    )}
-                </Card>
-              </Col>
-            </Row>
 
-            <Divider />
+                      ),
+                    )
+                  }
 
-            <Card
-              title="เกณฑ์ที่ Gemini สร้าง"
-            >
-              <List
-                dataSource={
-                  analysisResult.suggested_criteria
-                }
-                renderItem={(
-                  item
-                ) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      title={
-                        <Space>
-                          <Text
-                            strong
-                          >
-                            {
-                              item.name
-                            }
-                          </Text>
+                </Space>
 
-                          <Tag
-                            color="purple"
-                          >
-                            {
-                              item.weight
-                            }
-                            %
-                          </Tag>
-                        </Space>
+                <Divider />
+
+                <Title
+                  level={5}
+                >
+                  Soft Skills
+                </Title>
+
+                <Space
+                  wrap
+                >
+
+                  {
+                    convertToArray(
+                      geminiResult
+                        .soft_skills,
+                    ).map(
+                      (
+                        skill,
+                      ) => (
+
+                        <Tag
+                          color="purple"
+                          key={
+                            skill
+                          }
+                        >
+
+                          {
+                            skill
+                          }
+
+                        </Tag>
+
+                      ),
+                    )
+                  }
+
+                </Space>
+
+                <Divider />
+
+                <Title
+                  level={5}
+                >
+                  คุณสมบัติที่ต้องการ
+                </Title>
+
+                <List
+                  bordered
+                  dataSource={
+                    convertToArray(
+                      geminiResult
+                        .requirements,
+                    )
+                  }
+                  renderItem={(
+                    item,
+                    index,
+                  ) => (
+
+                    <List.Item>
+
+                      {
+                        index + 1
                       }
-                      description={
-                        item.description
+                      .{" "}
+                      {
+                        item
                       }
-                    />
-                  </List.Item>
-                )}
-              />
-            </Card>
-          </>
-        )}
+
+                    </List.Item>
+
+                  )}
+                />
+
+                <Divider />
+
+                <Title
+                  level={5}
+                >
+                  เกณฑ์ที่ Gemini แนะนำ
+                </Title>
+
+                <List
+                  bordered
+                  dataSource={
+                    geminiResult
+                      .suggested_criteria ??
+                    []
+                  }
+                  renderItem={(
+                    item,
+                    index,
+                  ) => (
+
+                    <List.Item>
+
+                      <List.Item.Meta
+                        title={
+                          <Space>
+
+                            <Text strong>
+
+                              {
+                                index + 1
+                              }
+                              .{" "}
+                              {
+                                item.name
+                              }
+
+                            </Text>
+
+                            <Tag
+                              color="green"
+                            >
+
+                              {
+                                item.weight
+                              }
+                              %
+
+                            </Tag>
+
+                          </Space>
+                        }
+                        description={
+                          item.description
+                        }
+                      />
+
+                    </List.Item>
+
+                  )}
+                />
+
+              </>
+            )
+            : (
+              <Spin />
+            )
+        }
+
       </Modal>
 
-      {/* ============================================ */}
-      {/* Criteria Modal */}
-      {/* ============================================ */}
+      {/* ================================================= */}
+      {/* Job Criteria Modal */}
+      {/* ================================================= */}
 
       <Modal
-        title={
-          editingCriteria
-            ? "แก้ไขเกณฑ์"
-            : "เพิ่มเกณฑ์"
-        }
+        title="จัดการเกณฑ์ประเมินผู้สมัคร"
         open={
           criteriaModalOpen
         }
-        onCancel={() =>
+        width={
+          1200
+        }
+        footer={
+          null
+        }
+        destroyOnClose
+        onCancel={() => {
+
           setCriteriaModalOpen(
-            false
-          )
-        }
-        onOk={
-          handleSaveCriteria
-        }
-        confirmLoading={
-          savingCriteria
-        }
-        okText="บันทึก"
-        cancelText="ยกเลิก"
+            false,
+          );
+
+          setSelectedJobId(
+            null,
+          );
+        }}
       >
-        <Form
-          form={
-            criteriaForm
-          }
-          layout="vertical"
-        >
-          <Form.Item
-            name="name"
-            label="ชื่อเกณฑ์"
-            rules={[
-              {
-                required:
-                  true,
 
-                message:
-                  "กรุณาระบุชื่อเกณฑ์",
-              },
-            ]}
-          >
-            <Input />
-          </Form.Item>
+        {
+          selectedJobId !== null
+            ? (
+              <JobCriteriaPage
+                jobPositionId={
+                  selectedJobId
+                }
+              />
+            )
+            : null
+        }
 
-          <Form.Item
-            name="description"
-            label="รายละเอียด"
-          >
-            <TextArea
-              rows={4}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="weight"
-            label="น้ำหนักคะแนน"
-            rules={[
-              {
-                required:
-                  true,
-
-                message:
-                  "กรุณาระบุน้ำหนัก",
-              },
-            ]}
-          >
-            <InputNumber
-              min={0}
-              max={100}
-              addonAfter="%"
-              style={{
-                width:
-                  "100%",
-              }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="is_required"
-            label="สถานะ"
-          >
-            <Select
-              options={[
-                {
-                  label:
-                    "ไม่บังคับ",
-
-                  value:
-                    false,
-                },
-
-                {
-                  label:
-                    "เป็นคุณสมบัติจำเป็น",
-
-                  value:
-                    true,
-                },
-              ]}
-            />
-          </Form.Item>
-        </Form>
       </Modal>
-    </>
+
+    </div>
   );
 }

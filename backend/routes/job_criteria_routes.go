@@ -15,10 +15,12 @@ func JobCriteriaRoutes(
 	jobCriteriaController :=
 		controller.NewJobCriteriaController(db)
 
-	// =====================================================
-	// GET เกณฑ์ทั้งหมดของตำแหน่งงาน
-	// GET /api/job-positions/:id/criteria
-	// =====================================================
+	jobCriteriaOptionController :=
+		controller.NewJobCriteriaOptionController(db)
+
+	// ==========================================
+	// Job Criteria
+	// ==========================================
 
 	api.GET(
 		"/job-positions/:id/criteria",
@@ -26,21 +28,11 @@ func JobCriteriaRoutes(
 		jobCriteriaController.GetByJobPositionID,
 	)
 
-	// =====================================================
-	// เพิ่มเกณฑ์ใหม่
-	// POST /api/job-positions/:id/criteria
-	// =====================================================
-
 	api.POST(
 		"/job-positions/:id/criteria",
 		middleware.AuthMiddleware(),
 		jobCriteriaController.Create,
 	)
-
-	// =====================================================
-	// แก้ไขเกณฑ์
-	// PUT /api/job-criteria/:criteriaId
-	// =====================================================
 
 	api.PUT(
 		"/job-criteria/:criteriaId",
@@ -48,14 +40,37 @@ func JobCriteriaRoutes(
 		jobCriteriaController.Update,
 	)
 
-	// =====================================================
-	// ลบเกณฑ์
-	// DELETE /api/job-criteria/:criteriaId
-	// =====================================================
-
 	api.DELETE(
 		"/job-criteria/:criteriaId",
 		middleware.AuthMiddleware(),
 		jobCriteriaController.Delete,
+	)
+
+	// ==========================================
+	// Criteria Options
+	// ==========================================
+
+	api.GET(
+		"/job-criteria/:criteriaId/options",
+		middleware.AuthMiddleware(),
+		jobCriteriaOptionController.GetByCriteriaID,
+	)
+
+	api.POST(
+		"/job-criteria/:criteriaId/options",
+		middleware.AuthMiddleware(),
+		jobCriteriaOptionController.Create,
+	)
+
+	api.PUT(
+		"/job-criteria-options/:optionId",
+		middleware.AuthMiddleware(),
+		jobCriteriaOptionController.Update,
+	)
+
+	api.DELETE(
+		"/job-criteria-options/:optionId",
+		middleware.AuthMiddleware(),
+		jobCriteriaOptionController.Delete,
 	)
 }
