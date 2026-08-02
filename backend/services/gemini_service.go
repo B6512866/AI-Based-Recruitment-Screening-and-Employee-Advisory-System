@@ -46,6 +46,8 @@ type JobAnalysisResult struct {
 	SoftSkills        []string         `json:"soft_skills"`
 	Education         string           `json:"education"`
 	Experience        string           `json:"experience"`
+	Benefits          []string         `json:"benefits"`     // เพิ่มฟิลด์สวัสดิการ
+	ContactInfo       string           `json:"contact_info"` // เพิ่มฟิลด์ข้อมูลติดต่อ
 	SuggestedCriteria []CriteriaRubric `json:"suggested_criteria"`
 }
 
@@ -94,14 +96,14 @@ func (s *GeminiService) AnalyzeImage(
 	if strings.TrimSpace(mimeType) == "" {
 		return nil, fmt.Errorf("ไม่พบ MIME Type ของรูปภาพ")
 	}
-
 	prompt := `
 คุณเป็นผู้เชี่ยวชาญด้าน HR และการวิเคราะห์ประกาศรับสมัครงาน
 
 จงวิเคราะห์รูปภาพประกาศรับสมัครงานที่ได้รับ และปฏิบัติภารกิจดังต่อไปนี้:
 
 1. สกัดข้อมูลพื้นฐานของประกาศงานสำหรับสร้างตำแหน่งงานในระบบ
-2. สกัดคุณสมบัติที่ต้องการออกมาเป็นข้อๆ และสร้าง "ร่างเกณฑ์ประเมินระดับคะแนน (Suggested Rubric)" เพื่อให้ HR นำไปปรับแต่งตัวเลขคะแนนและเงื่อนไขต่อเองได้ง่าย
+2. สกัดข้อมูลสวัสดิการและช่องทางการติดต่อเพิ่มเติม
+3. สกัดคุณสมบัติที่ต้องการออกมาเป็นข้อๆ และสร้าง "ร่างเกณฑ์ประเมินระดับคะแนน (Suggested Rubric)" เพื่อให้ HR นำไปปรับแต่งตัวเลขคะแนนและเงื่อนไขต่อเองได้ง่าย
 
 รูปแบบโครงสร้างข้อมูลต้องเป็น JSON ตามรายละเอียดนี้เท่านั้น:
 
@@ -118,6 +120,8 @@ func (s *GeminiService) AnalyzeImage(
   "soft_skills": ["ทักษะด้านการทำงานร่วมกัน (array of strings)"],
   "education": "วุฒิการศึกษา (string)",
   "experience": "ประสบการณ์ทำงาน (string)",
+  "benefits": ["สวัสดิการต่างๆ เช่น ประกันสังคม, โบนัส, กองทุนสำรองเลี้ยงชีพ (array of strings)"],
+  "contact_info": "ข้อมูลติดต่อ เช่น อีเมล, เบอร์โทรศัพท์, LINE, หรือชื่อผู้ติดต่อ (string)",
   "suggested_criteria": [
     {
       "id": "req_1",

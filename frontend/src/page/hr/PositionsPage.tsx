@@ -33,6 +33,7 @@ import type {
   UploadProps,
 } from "antd";
 
+
 import {
   DeleteOutlined,
   EyeOutlined,
@@ -53,6 +54,8 @@ import {
 import {
   analyzeJobAnnouncement,
   uploadJobAnnouncement,
+  getJobAnnouncementImage,
+  getJobAnnouncements,
 } from "../../services/jobAnnouncementService";
 
 import JobCriteriaPage from "./JobCriteriaPage";
@@ -90,6 +93,8 @@ interface GeminiResult {
   soft_skills: string | string[];
   education: string;
   experience: string;
+  benefits?: string | string[];
+  contact_info?: string;
   suggestedCriteria: SuggestedCriteria[];
 }
 
@@ -104,8 +109,16 @@ interface JobPosition {
   contact_info?: string;
   description?: string;
   criteria?: string;
+  responsibilities?: string;
+  requirements?: string;
+  technical_skills?: string;
+  soft_skills?: string;
+  education?: string;
+  experience?: string;
   status?: string;
   criteria_items?: unknown[];
+  announcement_url?: string;
+  announcement_id?: number;
 }
 
 interface JobFormValues {
@@ -118,6 +131,12 @@ interface JobFormValues {
   contact_info?: string;
   description?: string;
   criteria?: string;
+  responsibilities?: string;
+  requirements?: string;
+  technical_skills?: string;
+  soft_skills?: string;
+  education?: string;
+  experience?: string;
   status?: string;
 }
 
@@ -206,11 +225,40 @@ export default function PositionsPage() {
     setModalOpen(true);
   }
 
-  function openEditModal(job: JobPosition) {
+  async function openEditModal(job: JobPosition) {
     setEditingJob(job);
     setGeminiResult(null);
     setFileList([]);
     setUploadedAnnouncementID(null);
+
+    try {
+      const res = await getJobAnnouncements(job.ID);
+      const announcements = res?.data ?? res ?? [];
+      
+      if (Array.isArray(announcements) && announcements.length > 0) {
+        const latestAnnouncement = announcements[0];
+        setUploadedAnnouncementID(latestAnnouncement.ID);
+
+        // 💡 เรียกฟังก์ชันดึงรูปภาพผ่าน Service และแปลงเป็น Blob URL
+        try {
+          const blob = await getJobAnnouncementImage(latestAnnouncement.ID);
+          const imageUrl = URL.createObjectURL(blob);
+
+          setFileList([
+            {
+              uid: String(latestAnnouncement.ID),
+              name: latestAnnouncement.FileName || "ประกาศงาน.png",
+              status: "done",
+              url: imageUrl,
+            },
+          ]);
+        } catch (imgErr) {
+          console.error("Failed to load image blob:", imgErr);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load announcements:", error);
+    }
 
     form.setFieldsValue({
       title: job.title,
@@ -222,6 +270,12 @@ export default function PositionsPage() {
       contact_info: job.contact_info ?? "",
       description: job.description ?? "",
       criteria: job.criteria ?? "",
+      responsibilities: job.responsibilities ?? "",
+      requirements: job.requirements ?? "",
+      technical_skills: job.technical_skills ?? "",
+      soft_skills: job.soft_skills ?? "",
+      education: job.education ?? "",
+      experience: job.experience ?? "",
       status: job.status ?? "เปิดรับสมัคร",
     });
 
@@ -274,6 +328,20 @@ export default function PositionsPage() {
       }
 
       setUploadedAnnouncementID(announcement.ID);
+      
+      // แปลงไฟล์เป็น any เพื่อป้องกัน Type Error ของ uid และ originFileObj
+      const rcFile = file as any;
+
+      setFileList([
+        {
+          uid: rcFile.uid || String(Date.now()),
+          name: file.name,
+          status: "done",
+          url: announcement.url || announcement.announcement_url,
+          originFileObj: rcFile,
+        },
+      ]);
+
       message.success("อัปโหลดรูปประกาศงานสำเร็จ");
       await loadJobs();
     } catch (error) {
@@ -281,7 +349,11 @@ export default function PositionsPage() {
       const errorMessage =
         error instanceof Error ? error.message : "อัปโหลดประกาศงานไม่สำเร็จ";
       message.error(errorMessage);
-      setFileList([]);
+      
+      setFileList((prev) =>
+        prev.map((item) => ({ ...item, status: "error" }))
+      );
+      setUploadedAnnouncementID(null);
     } finally {
       setUploading(false);
     }
@@ -291,13 +363,17 @@ export default function PositionsPage() {
     fileList,
     maxCount: 1,
     accept: ".jpg,.jpeg,.png",
+    listType: "picture",
     beforeUpload: async (file) => {
+      // 2. ใช้ as any เพื่อหลีกเลี่ยงข้อจำกัด Type ระหว่าง Web File และ Ant Design RcFile
+      const rcFile = file as any;
+      
       setFileList([
         {
-          uid: file.uid,
+          uid: rcFile.uid || String(Date.now()),
           name: file.name,
           status: "uploading",
-          originFileObj: file,
+          originFileObj: rcFile,
         },
       ]);
       await handleUpload(file);
@@ -307,6 +383,22 @@ export default function PositionsPage() {
       setFileList([]);
       setUploadedAnnouncementID(null);
       return true;
+    },
+    onPreview: async (file) => {
+      let src = file.url;
+      if (!src && file.originFileObj) {
+        src = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file.originFileObj as Blob);
+          reader.onload = () => resolve(reader.result as string);
+        });
+      }
+      if (src) {
+        const image = new Image();
+        image.src = src;
+        const imgWindow = window.open(src);
+        imgWindow?.document.write(image.outerHTML);
+      }
     },
   };
 
@@ -321,7 +413,8 @@ export default function PositionsPage() {
     try {
       setAnalyzing(true);
       const response = await analyzeJobAnnouncement(uploadedAnnouncementID);
-      const result = response?.data ?? response;
+      
+      const result = response?.data?.data ?? response?.data ?? response;
 
       if (!result || !result.title) {
         throw new Error("ไม่พบข้อมูลผลวิเคราะห์จาก Gemini");
@@ -336,7 +429,14 @@ export default function PositionsPage() {
         salary: result.salary ?? "",
         type: result.employment_type ?? "",
         description: convertToText(result.description),
-        criteria: convertToText(result.requirements),
+        responsibilities: convertToText(result.responsibilities),
+        requirements: convertToText(result.requirements),
+        technical_skills: convertToText(result.technical_skills),
+        soft_skills: convertToText(result.soft_skills),
+        education: result.education ?? "",
+        experience: result.experience ?? "",
+        benefits: convertToText(result.benefits),
+        contact_info: result.contact_info ?? "",
       });
 
       setPreviewOpen(true);
@@ -607,6 +707,16 @@ export default function PositionsPage() {
                   />
                 </Form.Item>
               </Col>
+              <Col xs={24} md={12}>
+                <Form.Item label="ระดับการศึกษา" name="education">
+                  <Input placeholder="เช่น ปริญญาตรี สาขาวิศวกรรมคอมพิวเตอร์" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item label="ประสบการณ์" name="experience">
+                  <Input placeholder="เช่น 1-3 ปีขึ้นไป" />
+                </Form.Item>
+              </Col>
             </Row>
           </Card>
 
@@ -629,7 +739,7 @@ export default function PositionsPage() {
                 type="primary"
                 icon={<RobotOutlined />}
                 loading={analyzing}
-                disabled={!uploadedAnnouncementID}
+                disabled={!uploadedAnnouncementID && fileList.length === 0}
                 onClick={handleAnalyze}
               >
                 Gemini วิเคราะห์ประกาศงาน
@@ -641,19 +751,36 @@ export default function PositionsPage() {
 
           <Card size="small" title="ขั้นที่ 3: ตรวจสอบและแก้ไขข้อมูล">
             <Form.Item label="รายละเอียดงาน" name="description">
-              <TextArea rows={7} placeholder="Gemini จะนำรายละเอียดงานมาใส่ให้อัตโนมัติ" />
+              <TextArea rows={5} placeholder="Gemini จะนำรายละเอียดงานมาใส่ให้อัตโนมัติ" />
             </Form.Item>
 
-            <Form.Item label="คุณสมบัติที่ต้องการ" name="criteria">
-              <TextArea rows={7} placeholder="Gemini จะนำคุณสมบัติผู้สมัครมาใส่ให้อัตโนมัติ" />
+            <Form.Item label="หน้าที่ความรับผิดชอบ" name="responsibilities">
+              <TextArea rows={5} placeholder="Gemini จะนำหน้าที่ความรับผิดชอบมาใส่ให้อัตโนมัติ" />
             </Form.Item>
+
+            <Form.Item label="คุณสมบัติที่ต้องการ" name="requirements">
+              <TextArea rows={5} placeholder="Gemini จะนำคุณสมบัติผู้สมัครมาใส่ให้อัตโนมัติ" />
+            </Form.Item>
+
+            <Row gutter={16}>
+              <Col xs={24} md={12}>
+                <Form.Item label="ทักษะด้านเทคนิค (Technical Skills)" name="technical_skills">
+                  <TextArea rows={3} placeholder="เช่น React, TypeScript, Go" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item label="ทักษะทั่วไป (Soft Skills)" name="soft_skills">
+                  <TextArea rows={3} placeholder="เช่น การสื่อสาร, การทำงานเป็นทีม" />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Form.Item label="สวัสดิการ" name="benefits">
-              <TextArea rows={3} />
+              <TextArea rows={3} placeholder="เช่น ประกันสุขภาพ, โบนัสประจำปี" />
             </Form.Item>
 
             <Form.Item label="ข้อมูลติดต่อ" name="contact_info">
-              <TextArea rows={3} />
+              <TextArea rows={3} placeholder="เช่น อีเมล, เบอร์โทรศัพท์, Line Official" />
             </Form.Item>
           </Card>
 
@@ -745,6 +872,11 @@ export default function PositionsPage() {
               <Descriptions.Item label="สถานที่">{geminiResult.location || "-"}</Descriptions.Item>
               <Descriptions.Item label="แผนก">{geminiResult.department || "-"}</Descriptions.Item>
               <Descriptions.Item label="ประเภทงาน">{geminiResult.employment_type || "-"}</Descriptions.Item>
+              <Descriptions.Item label="การศึกษา">{geminiResult.education || "-"}</Descriptions.Item>
+              <Descriptions.Item label="ประสบการณ์">{geminiResult.experience || "-"}</Descriptions.Item>
+              <Descriptions.Item label="เงินเดือน" span={2}>{geminiResult.salary || "-"}</Descriptions.Item>
+              <Descriptions.Item label="สวัสดิการ" span={2}>{convertToText(geminiResult.benefits) || "-"}</Descriptions.Item>
+              <Descriptions.Item label="ข้อมูลติดต่อ" span={2}>{geminiResult.contact_info || "-"}</Descriptions.Item>
             </Descriptions>
 
             <Divider />

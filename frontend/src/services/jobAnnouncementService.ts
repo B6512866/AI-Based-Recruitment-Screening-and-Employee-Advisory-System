@@ -70,3 +70,10 @@ export async function deleteJobAnnouncement(
 
   return res.data;
 }
+
+export async function getJobAnnouncementImage(announcementId: number) {
+  const res = await apiClient.get(`/job-announcements/${announcementId}/image`, {
+    responseType: "blob",
+  });
+  return res.data;
+}

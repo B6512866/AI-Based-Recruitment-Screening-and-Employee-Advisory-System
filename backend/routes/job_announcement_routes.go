@@ -53,4 +53,9 @@ func JobAnnouncementRoutes(
 		middleware.AuthMiddleware(),
 		jobAnnouncementController.Analyze,
 	)
+	api.GET(
+		"/job-announcements/:announcementId/image",
+		middleware.AuthMiddleware(),
+		jobAnnouncementController.GetAnnouncementImage,
+	)
 }

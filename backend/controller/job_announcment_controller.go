@@ -232,7 +232,43 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 			return err
 		}
 
-		// 1. ค้นหา Criteria ทั้งหมดก่อนเพื่อลบ Options ที่ผูกไว้ออกให้หมด (ป้องกัน Orphan Records)
+		// อัปเดตข้อมูลรายละเอียด, สวัสดิการ และข้อมูลติดต่อ ลงใน JobPosition อัตโนมัติ[cite: 7]
+		var jobPosition entity.JobPosition
+		if err := tx.First(&jobPosition, announcement.JobPositionID).Error; err == nil {
+			if result.Title != "" {
+				jobPosition.Title = result.Title
+			}
+			if result.Department != "" {
+				jobPosition.Department = result.Department
+			}
+			if result.Location != "" {
+				jobPosition.Location = result.Location
+			}
+			if result.Salary != "" {
+				jobPosition.Salary = result.Salary
+			}
+			if result.EmploymentType != "" {
+				jobPosition.Type = result.EmploymentType
+			}
+			if result.Education != "" {
+				jobPosition.Education = result.Education
+			}
+			if result.Experience != "" {
+				jobPosition.Experience = result.Experience
+			}
+
+			jobPosition.Benefits = strings.Join(result.Benefits, "\n")
+			jobPosition.ContactInfo = result.ContactInfo
+			jobPosition.Description = strings.Join(result.Description, "\n")
+			jobPosition.Responsibilities = strings.Join(result.Responsibilities, "\n")
+			jobPosition.Requirements = strings.Join(result.Requirements, "\n")
+			jobPosition.TechnicalSkills = strings.Join(result.TechnicalSkills, ", ")
+			jobPosition.SoftSkills = strings.Join(result.SoftSkills, ", ")
+
+			_ = tx.Save(&jobPosition).Error
+		}
+
+		// 1. ค้นหา Criteria ทั้งหมดก่อนเพื่อลบ Options ที่ผูกไว้ออกให้หมด (ป้องกัน Orphan Records)[cite: 7]
 		var oldCriteriaList []entity.JobCriteria
 		if err := tx.Where("job_position_id = ?", announcement.JobPositionID).Find(&oldCriteriaList).Error; err == nil {
 			for _, oldCrit := range oldCriteriaList {
@@ -240,13 +276,13 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 			}
 		}
 
-		// 2. ลบ Criteria เก่า
+		// 2. ลบ Criteria เก่า[cite: 7]
 		if err := tx.Where("job_position_id = ?", announcement.JobPositionID).
 			Delete(&entity.JobCriteria{}).Error; err != nil {
 			return err
 		}
 
-		// 3. สร้าง Criteria + Options ใหม่
+		// 3. สร้าง Criteria + Options ใหม่[cite: 7]
 		for _, item := range result.SuggestedCriteria {
 			var options []entity.JobCriteriaOption
 			var maxScore float64 = 0
@@ -261,18 +297,15 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 					Name:        rub.Level,
 					Level:       rub.Level,
 					Condition:   rub.Condition,
-					Description: rub.Condition, // Sync Condition ใส่ Description ด้วย
+					Description: rub.Condition,
 					Score:       score,
 					IsActive:    true,
 				})
 			}
 
-			// --- เพิ่มส่วนตรวจสอบตรงนี้ ---
-			// ถ้า maxScore ที่คำนวณจากรูบริกเป็น 0 หรือ AI ไม่ได้กำหนดมา ให้กำหนดเป็น 10 เป็นค่า Default
 			if maxScore <= 0 {
 				maxScore = 10
 			}
-			// ----------------------------
 
 			criteria := entity.JobCriteria{
 				JobPositionID: announcement.JobPositionID,
@@ -280,7 +313,7 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 				Name:          item.Title,
 				Description:   item.Description,
 				IsRequired:    false,
-				MaxScore:      maxScore, // ค่า MaxScore จะเป็น 10 เสมอหากไม่มีค่าหรือเป็น 0
+				MaxScore:      maxScore,
 				Options:       options,
 			}
 
@@ -303,4 +336,35 @@ func (c *JobAnnouncementController) Analyze(ctx *gin.Context) {
 		"message": "Gemini วิเคราะห์และบันทึกเกณฑ์สำเร็จ",
 		"data":    result,
 	})
+}
+func (c *JobAnnouncementController) GetAnnouncementImage(ctx *gin.Context) {
+	announcementID, err := strconv.ParseUint(ctx.Param("announcementId"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ไฟล์ประกาศไม่ถูกต้อง"})
+		return
+	}
+
+	var announcement entity.JobAnnouncement
+	if err := c.db.First(&announcement, uint(announcementID)).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์ประกาศงาน"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถค้นหาข้อมูลไฟล์ได้"})
+		return
+	}
+
+	if announcement.FilePath == "" {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเส้นทางไฟล์ในระบบ"})
+		return
+	}
+
+	safePath := filepath.Clean(announcement.FilePath)
+	if _, err := os.Stat(safePath); os.IsNotExist(err) {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์รูปภาพบนเซิร์ฟเวอร์"})
+		return
+	}
+
+	// ส่งไฟล์รูปภาพกลับไปให้ Client แสดงผล
+	ctx.File(safePath)
 }
