@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Eye, FileCheck } from "lucide-react";
-import { getalljobs, getapplications, updateApplicationScreening, deleteapplication } from "../../services/jobPositionService";
+import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
 
 const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
@@ -47,6 +47,22 @@ export default function ScreeningPage() {
     const [analyzingStates, setAnalyzingStates] = useState<{ [key: number]: "idle" | "ocr" | "ai" | "saving" | "done" | "error" }>({});
     const [openRawText, setOpenRawText] = useState<{ [key: number]: boolean }>({});
     const activeJobIdRef = useRef<string>("");
+
+    // Manual Candidate Entry States
+    const [showManualAddModal, setShowManualAddModal] = useState(false);
+    const [manualFirstName, setManualFirstName] = useState("");
+    const [manualLastName, setManualLastName] = useState("");
+    const [manualEmail, setManualEmail] = useState("");
+    const [manualPhone, setManualPhone] = useState("");
+    const [manualResumeText, setManualResumeText] = useState("");
+    const [manualResumeUrl, setManualResumeUrl] = useState("");
+    const [manualResumeFileName, setManualResumeFileName] = useState("");
+    const [manualTranscriptText, setManualTranscriptText] = useState("");
+    const [manualTranscriptUrl, setManualTranscriptUrl] = useState("");
+    const [manualTranscriptFileName, setManualTranscriptFileName] = useState("");
+    const [manualJobId, setManualJobId] = useState("");
+    const [manualSubmitting, setManualSubmitting] = useState(false);
+    const [manualError, setManualError] = useState("");
 
     const parseCriteria = (text: string) => {
         const criteriaMap: { [key: string]: { name: string; max: number } } = {};
@@ -532,6 +548,110 @@ ${tableRowsExample}
         } catch (err) {
             console.error("ลบข้อมูลผู้สมัครล้มเหลว:", err);
             alert("เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร");
+        }
+    };
+
+    // ฟังก์ชันส่งฟอร์มบันทึกผู้สมัครงานด้วยตนเองโดย HR
+    const handleManualAddSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!manualFirstName.trim() || !manualLastName.trim() || !manualEmail.trim() || !manualPhone.trim() || !manualResumeText.trim() || !manualJobId) {
+            setManualError("กรุณากรอกข้อมูลและรายละเอียด Resume ให้ครบถ้วน");
+            return;
+        }
+
+        setManualSubmitting(true);
+        setManualError("");
+
+        try {
+            await applyjob(
+                parseInt(manualJobId),
+                manualFirstName,
+                manualLastName,
+                manualEmail,
+                manualPhone,
+                manualResumeText,
+                manualResumeUrl,
+                manualTranscriptUrl,
+                manualTranscriptText
+            );
+
+            // โหลดผู้สมัครใหม่หากเป็นตำแหน่งงานที่กำลังเปิดดูอยู่
+            if (selectedJobId && selectedJobId === manualJobId) {
+                const res = await getapplications(parseInt(selectedJobId));
+                if (res && res.data) {
+                    setApplicants(res.data);
+                }
+            }
+
+            // ล้างฟอร์มและปิดโมดอล
+            setManualFirstName("");
+            setManualLastName("");
+            setManualEmail("");
+            setManualPhone("");
+            setManualResumeText("");
+            setManualResumeUrl("");
+            setManualResumeFileName("");
+            setManualTranscriptText("");
+            setManualTranscriptUrl("");
+            setManualTranscriptFileName("");
+            setShowManualAddModal(false);
+            alert("บันทึกข้อมูลผู้สมัครรายใหม่สำเร็จแล้ว!");
+        } catch (err: any) {
+            setManualError(err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกข้อมูลผู้สมัคร");
+        } finally {
+            setManualSubmitting(false);
+        }
+    };
+
+    const handleManualResumeUpload = async (file: File) => {
+        if (!file) return;
+        setManualResumeFileName(file.name + " (กำลังอัปโหลด...)");
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await apiClient.post("/upload", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+            if (res.data && res.data.url) {
+                setManualResumeUrl(res.data.url);
+                setManualResumeFileName(file.name + " (อัปโหลดสำเร็จ)");
+                if (file.name.toLowerCase().endsWith(".txt")) {
+                    const reader = new FileReader();
+                    reader.onload = ev => setManualResumeText(ev.target?.result as string || "");
+                    reader.readAsText(file, "utf-8");
+                } else {
+                    setManualResumeText(`ข้อมูลประวัติย่อแบบเอกสาร/รูปภาพ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
+                }
+            }
+        } catch (e) {
+            setManualResumeFileName("");
+            alert("อัปโหลดไฟล์ Resume ล้มเหลว");
+        }
+    };
+
+    const handleManualTranscriptUpload = async (file: File) => {
+        if (!file) return;
+        setManualTranscriptFileName(file.name + " (กำลังอัปโหลด...)");
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await apiClient.post("/upload", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+            if (res.data && res.data.url) {
+                setManualTranscriptUrl(res.data.url);
+                setManualTranscriptFileName(file.name + " (อัปโหลดสำเร็จ)");
+                if (file.name.toLowerCase().endsWith(".txt")) {
+                    const reader = new FileReader();
+                    reader.onload = ev => setManualTranscriptText(ev.target?.result as string || "");
+                    reader.readAsText(file, "utf-8");
+                } else {
+                    setManualTranscriptText(`ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
+                }
+            }
+        } catch (e) {
+            setManualTranscriptFileName("");
+            alert("อัปโหลดไฟล์ Transcript ล้มเหลว");
         }
     };
 
@@ -1031,6 +1151,16 @@ ${tableRowsExample}
                                 <p className="text-slate-400 text-xs">เลือกตำแหน่งงานด้านขวา ระบบจะดึงเรซูเม่ของผู้สมัครทุกคนและรันการวิเคราะห์คะแนนอัตโนมัติทันที</p>
                             </div>
                             <div className="flex flex-col sm:flex-row items-center gap-3">
+                                <button
+                                    onClick={() => {
+                                        setManualJobId(selectedJobId || "");
+                                        setShowManualAddModal(true);
+                                    }}
+                                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#4169E1] text-[#4169E1] hover:bg-blue-50/50 text-xs font-bold transition-all active:scale-95 whitespace-nowrap cursor-pointer"
+                                >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    กรอก Resume / เพิ่มผู้สมัครด้วยตนเอง
+                                </button>
                                 <div className="min-w-[240px] w-full">
                                     <select
                                         value={selectedJobId}
@@ -1330,6 +1460,193 @@ ${tableRowsExample}
                             กรุณาเลือกตำแหน่งงานขององค์กรด้านบนเพื่อรันการคัดกรอง Resume ทั้งหมด
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* 📌 MODAL: HR กรอกประวัติ/Resume ของผู้สมัครด้วยตนเอง */}
+            {showManualAddModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-scaleUp flex flex-col font-sans max-h-[90vh]">
+                        {/* Modal Header */}
+                        <div className="bg-[#4169E1] text-white p-5 flex items-center justify-between shrink-0">
+                            <div>
+                                <h3 className="font-black text-lg">กรอกประวัติ / เพิ่มผู้สมัครงานด้วยตนเอง</h3>
+                                <p className="text-white/80 text-xs mt-0.5">เพิ่มประวัติและกรอก Resume ของผู้สมัครเข้าระบบคัดกรองโดยตรง</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowManualAddModal(false);
+                                    setManualError("");
+                                }}
+                                className="text-white/80 hover:text-white hover:bg-white/10 p-1 rounded-full transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body / Form */}
+                        <form onSubmit={handleManualAddSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+                            {manualError && (
+                                <div className="p-3.5 bg-red-50 border border-red-100 rounded-xl text-xs text-red-500 font-semibold flex items-center gap-2">
+                                    <X className="w-4.5 h-4.5 text-red-500 shrink-0" />
+                                    <span>{manualError}</span>
+                                </div>
+                            )}
+
+                            {/* Section 1: ข้อมูลผู้สมัคร */}
+                            <div className="space-y-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">1. ข้อมูลส่วนตัวผู้สมัคร</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-slate-505">ชื่อจริง *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={manualFirstName}
+                                            onChange={e => setManualFirstName(e.target.value)}
+                                            placeholder="เช่น ณภัทร"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-slate-505">นามสกุล *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={manualLastName}
+                                            onChange={e => setManualLastName(e.target.value)}
+                                            placeholder="เช่น อนันต์"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-slate-505">อีเมล *</label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={manualEmail}
+                                            onChange={e => setManualEmail(e.target.value)}
+                                            placeholder="candidate@example.com"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-slate-505">เบอร์ติดต่อ *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={manualPhone}
+                                            onChange={e => setManualPhone(e.target.value)}
+                                            placeholder="081-234-5678"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-slate-100" />
+
+                            {/* Section 2: ตำแหน่งงานที่ต้องการยื่นสมัคร */}
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">2. เลือกตำแหน่งงานที่จะยื่นสมัคร *</label>
+                                <select
+                                    required
+                                    value={manualJobId}
+                                    onChange={e => setManualJobId(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 font-sans"
+                                >
+                                    <option value="">-- เลือกตำแหน่งงาน --</option>
+                                    {jobs.map(job => (
+                                        <option key={job.ID} value={job.ID.toString()}>{job.title}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <hr className="border-slate-100" />
+
+                            {/* Section 3: Resume */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">3. ข้อมูล Resume (ประวัติย่อการทำงาน) *</h4>
+                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
+                                        อัปโหลดไฟล์ดึงข้อความ
+                                        <input
+                                            type="file"
+                                            accept=".txt,.pdf,image/*"
+                                            className="hidden"
+                                            onChange={e => e.target.files?.[0] && handleManualResumeUpload(e.target.files[0])}
+                                        />
+                                    </label>
+                                </div>
+                                {manualResumeFileName && (
+                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
+                                        ไฟล์ประวัติย่อ: {manualResumeFileName}
+                                    </div>
+                                )}
+                                <textarea
+                                    required
+                                    value={manualResumeText}
+                                    onChange={e => setManualResumeText(e.target.value)}
+                                    placeholder="พิมพ์ประวัติย่อ หรือ วางข้อมูล Resume ที่นี่..."
+                                    rows={8}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
+                                />
+                            </div>
+
+                            <hr className="border-slate-100" />
+
+                            {/* Section 4: Transcript */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">4. ข้อมูล Transcript (ผลการศึกษา) *</h4>
+                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
+                                        อัปโหลดไฟล์ดึงข้อความ
+                                        <input
+                                            type="file"
+                                            accept=".txt,.pdf,image/*"
+                                            className="hidden"
+                                            onChange={e => e.target.files?.[0] && handleManualTranscriptUpload(e.target.files[0])}
+                                        />
+                                    </label>
+                                </div>
+                                {manualTranscriptFileName && (
+                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
+                                        ไฟล์ผลการศึกษา: {manualTranscriptFileName}
+                                    </div>
+                                )}
+                                <textarea
+                                    required
+                                    value={manualTranscriptText}
+                                    onChange={e => setManualTranscriptText(e.target.value)}
+                                    placeholder="พิมพ์ หรือ วางข้อมูลเกรดและรายวิชาจาก Transcript ที่นี่..."
+                                    rows={5}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-350 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
+                                />
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-4 border-t border-slate-100 flex justify-end gap-3 shrink-0 bg-slate-50/30 pt-4 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowManualAddModal(false);
+                                        setManualError("");
+                                    }}
+                                    className="px-5 py-2 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-slate-50 text-xs"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={manualSubmitting}
+                                    className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-100 disabled:opacity-50"
+                                >
+                                    {manualSubmitting ? "กำลังบันทึกผู้สมัคร..." : "บันทึกและส่งสมัคร"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>

@@ -9,7 +9,11 @@ import {
 } from "lucide-react";
 
 // ── NAVBAR ──────────────────────────────────────────
-export function Navbar() {
+interface NavbarProps {
+    onCheckStatusClick: () => void;
+}
+
+export function Navbar({ onCheckStatusClick }: NavbarProps) {
     const navigate = useNavigate();
     return (
         <nav className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-6 md:px-12 py-4">
@@ -26,14 +30,21 @@ export function Navbar() {
                 <a href="#solution" className="text-slate-500 hover:text-[#4169E1] text-xs font-bold uppercase tracking-wider transition-colors font-sans">ความต่างของเรา</a>
                 <a href="#features" className="text-slate-500 hover:text-[#4169E1] text-xs font-bold uppercase tracking-wider transition-colors font-sans">ฟีเจอร์หลัก</a>
                 <a href="#how-it-works" className="text-slate-500 hover:text-[#4169E1] text-xs font-bold uppercase tracking-wider transition-colors font-sans">ขั้นตอนทำงาน</a>
-                <a href="#job-board" className="text-slate-500 hover:text-[#4169E1] text-xs font-bold uppercase tracking-wider transition-colors font-sans">ร่วมงานกับเรา</a>
             </div>
-            <button
-                onClick={() => navigate("/login")}
-                className="bg-[#4169E1] hover:bg-[#3458ca] text-white font-bold px-6 py-2.5 rounded-xl text-xs tracking-wide shadow-md shadow-indigo-100 hover:shadow-lg transition-all active:scale-95 font-sans"
-            >
-                เข้าสู่ระบบ HR / พนักงาน
-            </button>
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={onCheckStatusClick}
+                    className="border border-[#4169E1] text-[#4169E1] hover:bg-blue-50/50 font-bold px-4 py-2.5 rounded-xl text-xs tracking-wide transition-all active:scale-95 font-sans"
+                >
+                    เช็คสถานะสมัครงาน
+                </button>
+                <button
+                    onClick={() => navigate("/login")}
+                    className="bg-[#4169E1] hover:bg-[#3458ca] text-white font-bold px-6 py-2.5 rounded-xl text-xs tracking-wide shadow-md shadow-indigo-100 hover:shadow-lg transition-all active:scale-95 font-sans"
+                >
+                    เข้าสู่ระบบ HR / พนักงาน
+                </button>
+            </div>
         </nav>
     );
 }
