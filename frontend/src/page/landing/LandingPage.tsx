@@ -10,7 +10,7 @@ import {
     CTASection,
     Footer,
 } from "./landing-components";
-import { getalljobs, applyjob } from "../../services/jobPositionService";
+import { getalljobs, applyjob, checkApplicationStatus } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
 import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload } from "lucide-react";
 import { LoginModal } from "../auth/LoginPage";
@@ -45,6 +45,13 @@ function LandingPage() {
     const [activeDetailJob, setActiveDetailJob] = useState<JobPosition | null>(null);
     const [showApplySuccess, setShowApplySuccess] = useState(false);
     const [showApplyForm, setShowApplyForm] = useState(false);
+    const [showStatusModal, setShowStatusModal] = useState(false);
+    const [activeTab, setActiveTab] = useState<"jobs" | "status">("jobs");
+    const [createdApplicationCode, setCreatedApplicationCode] = useState("");
+    const [appCodeQuery, setAppCodeQuery] = useState("");
+    const [queryResult, setQueryResult] = useState<any | null>(null);
+    const [queryLoading, setQueryLoading] = useState(false);
+    const [queryError, setQueryError] = useState("");
     const [applyFirstName, setApplyFirstName] = useState("");
     const [applyLastName, setApplyLastName] = useState("");
     const [applyEmail, setApplyEmail] = useState("");
@@ -155,7 +162,7 @@ function LandingPage() {
         setApplyError("");
         try {
             if (selectedJob) {
-                await applyjob(
+                const response = await applyjob(
                     selectedJob.ID,
                     applyFirstName,
                     applyLastName,
@@ -166,6 +173,13 @@ function LandingPage() {
                     applyTranscriptUrl,
                     applyTranscriptText
                 );
+                
+                if (response && response.application_code) {
+                    setCreatedApplicationCode(response.application_code);
+                } else if (response && response.application_id) {
+                    setCreatedApplicationCode(`APP-${10000 + response.application_id}`);
+                }
+
                 setShowApplySuccess(true);
                 setShowApplyForm(false); // ปิดฟอร์มสมัครงาน
                 // เคลียร์ค่าในฟอร์มเมื่อส่งสำเร็จ
@@ -183,6 +197,30 @@ function LandingPage() {
             setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
         } finally {
             setSubmittingApply(false);
+        }
+    };
+
+    // ฟังก์ชันตรวจสอบสถานะสมัครงานด้วยรหัสใบสมัคร
+    const handleStatusQuery = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!appCodeQuery.trim()) {
+            setQueryError("กรุณากรอกรหัสใบสมัคร");
+            return;
+        }
+        setQueryLoading(true);
+        setQueryError("");
+        setQueryResult(null);
+        try {
+            const res = await checkApplicationStatus(appCodeQuery.trim());
+            if (res && res.data) {
+                setQueryResult(res.data);
+            } else {
+                setQueryError("ไม่พบข้อมูลใบสมัคร");
+            }
+        } catch (err: any) {
+            setQueryError(err.response?.data?.error || "เกิดข้อผิดพลาดในการตรวจสอบสถานะใบสมัคร");
+        } finally {
+            setQueryLoading(false);
         }
     };
 
@@ -231,108 +269,219 @@ function LandingPage() {
 
     return (
         <div className="bg-[#f8fafc] min-h-screen font-sans flex flex-col text-slate-900 scroll-smooth">
-            <Navbar />
+            <Navbar onCheckStatusClick={() => {
+                setActiveTab("status");
+                setTimeout(() => {
+                    document.getElementById("hero")?.scrollIntoView({ behavior: "smooth" });
+                }, 50);
+            }} />
             <main className="grow">
                 <section id="hero" className="animate-fadeIn">
                     <Hero 
                         jobBoardContent={
                             <div className="text-left space-y-6">
-                                {/* Search and Filters */}
-                                <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row gap-4 mb-4">
-                                    <div className="flex-1 relative">
-                                        <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                                        <input
-                                            type="text"
-                                            placeholder="ค้นหาชื่อตำแหน่งงาน คีย์เวิร์ด หรือแผนก..."
-                                            value={searchQuery}
-                                            onChange={e => setSearchQuery(e.target.value)}
-                                            className="w-full bg-slate-50 border border-slate-200/50 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
-                                        />
-                                    </div>
-                                    <div className="w-full md:w-60">
-                                        <select
-                                            value={selectedDept}
-                                            onChange={e => setSelectedDept(e.target.value)}
-                                            className="w-full bg-slate-50 border border-slate-200/50 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
-                                        >
-                                            <option value="all">ทุกแผนก / ฝ่าย</option>
-                                            {departments.map(dept => (
-                                                <option key={dept} value={dept}>{dept}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                {/* Tab selector */}
+                                <div className="flex gap-2 border-b border-slate-200 pb-2">
+                                    <button
+                                        onClick={() => setActiveTab("jobs")}
+                                        className={`px-4 py-2 text-sm font-bold transition-all border-b-2 ${
+                                            activeTab === "jobs"
+                                                ? "border-[#4169E1] text-[#4169E1] font-extrabold"
+                                                : "border-transparent text-slate-400 hover:text-slate-600"
+                                        }`}
+                                    >
+                                        ตำแหน่งงานที่เปิดรับสมัคร
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab("status")}
+                                        className={`px-4 py-2 text-sm font-bold transition-all border-b-2 ${
+                                            activeTab === "status"
+                                                ? "border-[#4169E1] text-[#4169E1] font-extrabold"
+                                                : "border-transparent text-slate-400 hover:text-slate-600"
+                                        }`}
+                                    >
+                                        เช็คสถานะสมัครงาน
+                                    </button>
                                 </div>
 
-                                {/* Jobs Grid */}
-                                {loading ? (
-                                    <div className="py-12 text-center text-slate-400 text-sm">กำลังโหลดข้อมูลตำแหน่งงานว่าง...</div>
-                                ) : filteredJobs.length === 0 ? (
-                                    <div className="py-12 text-center bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center gap-3">
-                                        <Briefcase className="w-10 h-10 text-slate-300 animate-pulse" />
-                                        <p className="text-slate-500 font-bold">ไม่พบตำแหน่งงานที่คุณค้นหาในขณะนี้</p>
-                                        <p className="text-slate-300 text-xs">กรุณาลองระบุคำค้นหาใหม่อีกครั้ง</p>
+                                {activeTab === "jobs" ? (
+                                    <div className="space-y-6 animate-fadeIn">
+                                        {/* Search and Filters */}
+                                        <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row gap-4 mb-4">
+                                            <div className="flex-1 relative">
+                                                <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="ค้นหาชื่อตำแหน่งงาน คีย์เวิร์ด หรือแผนก..."
+                                                    value={searchQuery}
+                                                    onChange={e => setSearchQuery(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200/50 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                                />
+                                            </div>
+                                            <div className="w-full md:w-60">
+                                                <select
+                                                    value={selectedDept}
+                                                    onChange={e => setSelectedDept(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200/50 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                                >
+                                                    <option value="all">ทุกแผนก / ฝ่าย</option>
+                                                    {departments.map(dept => (
+                                                        <option key={dept} value={dept}>{dept}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Jobs Grid */}
+                                        {loading ? (
+                                            <div className="py-12 text-center text-slate-400 text-sm">กำลังโหลดข้อมูลตำแหน่งงานว่าง...</div>
+                                        ) : filteredJobs.length === 0 ? (
+                                            <div className="py-12 text-center bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center gap-3">
+                                                <Briefcase className="w-10 h-10 text-slate-300 animate-pulse" />
+                                                <p className="text-slate-500 font-bold">ไม่พบตำแหน่งงานที่คุณค้นหาในขณะนี้</p>
+                                                <p className="text-slate-300 text-xs">กรุณาลองระบุคำค้นหาใหม่อีกครั้ง</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {filteredJobs.map(job => (
+                                                    <div
+                                                        key={job.ID}
+                                                        className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all p-6 flex flex-col justify-between animate-fadeIn"
+                                                    >
+                                                        <div className="space-y-4">
+                                                            {/* Category & Status */}
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-[#4169E1]">
+                                                                    {job.department || "General"}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                                                    เปิดรับสมัคร
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Job Title */}
+                                                            <div>
+                                                                <h3 className="font-extrabold text-slate-800 text-base leading-snug line-clamp-2 min-h-[44px]">
+                                                                    {job.title}
+                                                                </h3>
+                                                            </div>
+
+                                                            {/* Metadata */}
+                                                            <div className="space-y-2 text-xs text-slate-500 font-medium pt-2">
+                                                                {job.location && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                        <span className="truncate">{job.location}</span>
+                                                                    </div>
+                                                                )}
+                                                                {job.salary && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                        <span>เงินเดือน: {job.salary}</span>
+                                                                    </div>
+                                                                )}
+                                                                {job.type && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                        <span>{job.type}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* CTA Button */}
+                                                        <div className="pt-6">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveDetailJob(job);
+                                                                }}
+                                                                className="w-full bg-slate-50 hover:bg-[#4169E1] hover:text-white text-[#4169E1] font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                                                            >
+                                                                ดูรายละเอียด & สมัครงาน
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {filteredJobs.map(job => (
-                                            <div
-                                                key={job.ID}
-                                                className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all p-6 flex flex-col justify-between"
+                                    <div className="bg-white/95 backdrop-blur-md p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-xl space-y-6 max-w-2xl mx-auto animate-fadeIn text-left">
+                                        <div className="space-y-2 text-center md:text-left">
+                                            <h4 className="font-extrabold text-slate-800 text-lg">ตรวจสอบสถานะการสมัครของคุณ</h4>
+                                            <p className="text-slate-400 text-xs font-semibold">กรอกรหัสใบสมัครงานที่คุณได้รับเพื่อติดตามสถานะการพิจารณาแบบเรียลไทม์</p>
+                                        </div>
+                                        <form onSubmit={handleStatusQuery} className="flex flex-col sm:flex-row gap-3">
+                                            <div className="flex-1 relative">
+                                                <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="ระบุรหัสใบสมัคร เช่น APP-10001"
+                                                    value={appCodeQuery}
+                                                    onChange={e => setAppCodeQuery(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-mono"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={queryLoading}
+                                                className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-8 py-3 rounded-xl text-sm transition-all shadow-md shadow-blue-100 active:scale-95 shrink-0"
                                             >
-                                                <div className="space-y-4">
-                                                    {/* Category & Status */}
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-[#4169E1]">
-                                                            {job.department || "General"}
-                                                        </span>
-                                                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                                                            เปิดรับสมัคร
-                                                        </span>
-                                                    </div>
+                                                {queryLoading ? "กำลังตรวจสอบ..." : "ตรวจสอบสถานะ"}
+                                            </button>
+                                        </form>
 
-                                                    {/* Job Title */}
-                                                    <div>
-                                                        <h3 className="font-extrabold text-slate-800 text-base leading-snug line-clamp-2 min-h-[44px]">
-                                                            {job.title}
-                                                        </h3>
-                                                    </div>
+                                        {queryError && (
+                                            <div className="p-3.5 bg-red-50 border border-red-100 rounded-xl text-xs text-red-500 font-semibold flex items-center gap-2">
+                                                <AlertCircle className="w-4.5 h-4.5 text-red-500 shrink-0" />
+                                                <span>{queryError}</span>
+                                            </div>
+                                        )}
 
-                                                    {/* Metadata */}
-                                                    <div className="space-y-2 text-xs text-slate-500 font-medium pt-2">
-                                                        {job.location && (
-                                                            <div className="flex items-center gap-2">
-                                                                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                                                                <span className="truncate">{job.location}</span>
-                                                            </div>
-                                                        )}
-                                                        {job.salary && (
-                                                            <div className="flex items-center gap-2">
-                                                                <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
-                                                                <span>{job.salary}</span>
-                                                            </div>
-                                                        )}
-                                                        {job.type && (
-                                                            <div className="flex items-center gap-2">
-                                                                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                                                                <span>{job.type}</span>
-                                                            </div>
-                                                        )}
+                                        {queryResult && (
+                                            <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 space-y-4 animate-scaleUp">
+                                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-slate-200 pb-4">
+                                                    <div className="space-y-1">
+                                                        <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">ตำแหน่งงานที่สมัคร</span>
+                                                        <h4 className="font-extrabold text-slate-800 text-base leading-snug">{queryResult.position_title}</h4>
                                                     </div>
+                                                    <span className={`text-xs font-black px-3 py-1.5 rounded-lg text-center uppercase tracking-wider ${
+                                                        queryResult.status === "ผ่านการคัดเลือก" || queryResult.status === "approved"
+                                                            ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                                            : queryResult.status === "นัดสัมภาษณ์" || queryResult.status === "interview"
+                                                            ? "bg-indigo-50 text-[#4169E1] border border-blue-100"
+                                                            : queryResult.status === "ปฏิเสธ" || queryResult.status === "rejected"
+                                                            ? "bg-rose-50 text-rose-600 border border-rose-100"
+                                                            : "bg-amber-50 text-amber-600 border border-amber-100"
+                                                    }`}>
+                                                        {queryResult.status === "pending" || queryResult.status === "รอพิจารณา" ? "รอพิจารณา" : queryResult.status}
+                                                    </span>
                                                 </div>
-
-                                                <div className="pt-6 mt-6 border-t border-slate-100">
-                                                    <button
-                                                        onClick={() => {
-                                                            setActiveDetailJob(job);
-                                                        }}
-                                                        className="w-full bg-slate-50 hover:bg-[#4169E1] hover:text-white text-[#4169E1] font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
-                                                    >
-                                                        ดูรายละเอียด & สมัครงาน
-                                                    </button>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-xs pt-2">
+                                                    <div>
+                                                        <span className="text-slate-400 font-bold block mb-0.5">ผู้สมัคร</span>
+                                                        <span className="text-slate-800 font-bold text-sm">{queryResult.first_name} {queryResult.last_name}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-slate-400 font-bold block mb-0.5">รหัสใบสมัคร</span>
+                                                        <span className="text-[#4169E1] font-extrabold text-sm font-mono">{queryResult.code}</span>
+                                                    </div>
+                                                    <div className="col-span-1 sm:col-span-2">
+                                                        <span className="text-slate-400 font-bold block mb-0.5">ยื่นสมัครเมื่อ</span>
+                                                        <span className="text-slate-600 font-semibold text-sm">
+                                                            {new Date(queryResult.created_at).toLocaleDateString("th-TH", {
+                                                                year: "numeric",
+                                                                month: "long",
+                                                                day: "numeric",
+                                                                hour: "2-digit",
+                                                                minute: "2-digit"
+                                                            })}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -496,13 +645,23 @@ function LandingPage() {
                             <ShieldCheck className="w-10 h-10" />
                         </div>
                         <h3 className="text-lg font-black text-slate-800">ส่งใบสมัครสำเร็จ!</h3>
-                        <p className="text-slate-500 text-sm leading-relaxed">
-                            ระบบได้รับใบสมัครงานของคุณแล้ว เพื่อความรวดเร็วในการพิจารณา กรุณาส่ง Resume และเอกสารเพิ่มเติมตามรายละเอียดการติดต่อที่ระบุในประกาศรับสมัครงาน
+                        
+                        {createdApplicationCode && (
+                            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 my-2 text-center space-y-1">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">รหัสใบสมัครงานของคุณคือ</span>
+                                <span className="text-2xl font-black text-[#4169E1] tracking-wide select-all font-mono block">{createdApplicationCode}</span>
+                                <span className="text-[10px] text-slate-400 font-medium block">* ระบบได้จำลองส่งรหัสใบสมัครนี้ไปยังอีเมลของคุณเรียบร้อยแล้ว</span>
+                            </div>
+                        )}
+
+                        <p className="text-slate-500 text-xs leading-relaxed">
+                            โปรดเซฟบันทึกรหัสใบสมัครนี้ไว้ใช้สืบค้นและติดตามผลการประกาศรับสมัครงานในรอบถัดไป
                         </p>
                         <button
                             onClick={() => {
                                 setShowApplySuccess(false);
                                 setSelectedJob(null);
+                                setCreatedApplicationCode("");
                             }}
                             className="w-full bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-blue-100 font-sans"
                         >
@@ -666,6 +825,118 @@ function LandingPage() {
                             </button>
                         </div>
                     </form>
+                </div>
+            )}
+
+            {/* 📌 MODAL: ตรวจสอบสถานะการสมัครงาน */}
+            {showStatusModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-scaleUp flex flex-col font-sans">
+                        <div className="bg-[#4169E1] text-white p-5 flex items-center justify-between shrink-0">
+                            <div>
+                                <h3 className="font-black text-lg">ตรวจสอบสถานะการสมัครงาน</h3>
+                                <p className="text-white/80 text-xs mt-0.5">ค้นหาข้อมูลใบสมัครของคุณแบบเรียลไทม์</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowStatusModal(false);
+                                    setAppCodeQuery("");
+                                    setQueryResult(null);
+                                    setQueryError("");
+                                }}
+                                className="text-white/80 hover:text-white hover:bg-white/10 p-1 rounded-full transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <form onSubmit={handleStatusQuery} className="flex gap-2">
+                                <div className="flex-1 relative">
+                                    <Search className="w-4.5 h-4.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input
+                                        type="text"
+                                        placeholder="ระบุรหัสใบสมัคร เช่น APP-10001"
+                                        value={appCodeQuery}
+                                        onChange={e => setAppCodeQuery(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-mono"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={queryLoading}
+                                    className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-100 shrink-0"
+                                >
+                                    {queryLoading ? "กำลังค้นหา..." : "ตรวจสอบ"}
+                                </button>
+                            </form>
+
+                            {queryError && (
+                                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-500 font-semibold flex items-center gap-2">
+                                    <AlertCircle className="w-4.5 h-4.5 text-red-500 shrink-0" />
+                                    <span>{queryError}</span>
+                                </div>
+                            )}
+
+                            {queryResult && (
+                                <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4 animate-fadeIn">
+                                    <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">ตำแหน่งงานที่สมัคร</span>
+                                            <h4 className="font-extrabold text-slate-800 text-sm leading-snug">{queryResult.position_title}</h4>
+                                        </div>
+                                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-md shrink-0 uppercase tracking-wider ${
+                                            queryResult.status === "ผ่านการคัดเลือก" || queryResult.status === "approved"
+                                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                                : queryResult.status === "นัดสัมภาษณ์" || queryResult.status === "interview"
+                                                ? "bg-indigo-50 text-[#4169E1] border border-blue-100"
+                                                : queryResult.status === "ปฏิเสธ" || queryResult.status === "rejected"
+                                                ? "bg-rose-50 text-rose-600 border border-rose-100"
+                                                : "bg-amber-50 text-amber-600 border border-amber-100"
+                                        }`}>
+                                            {queryResult.status === "pending" || queryResult.status === "รอพิจารณา" ? "รอพิจารณา" : queryResult.status}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                                        <div>
+                                            <span className="text-slate-400 font-bold block mb-0.5">ผู้สมัคร</span>
+                                            <span className="text-slate-700 font-medium">{queryResult.first_name} {queryResult.last_name}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-400 font-bold block mb-0.5">รหัสใบสมัคร</span>
+                                            <span className="text-[#4169E1] font-bold font-mono">{queryResult.code}</span>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <span className="text-slate-400 font-bold block mb-0.5">ยื่นสมัครเมื่อ</span>
+                                            <span className="text-slate-600 font-medium">
+                                                {new Date(queryResult.created_at).toLocaleDateString("th-TH", {
+                                                    year: "numeric",
+                                                    month: "long",
+                                                    day: "numeric",
+                                                    hour: "2-digit",
+                                                    minute: "2-digit"
+                                                })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100 flex justify-end shrink-0 bg-slate-50/30">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowStatusModal(false);
+                                    setAppCodeQuery("");
+                                    setQueryResult(null);
+                                    setQueryError("");
+                                }}
+                                className="px-5 py-2 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-slate-50 text-xs"
+                            >
+                                ปิด
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

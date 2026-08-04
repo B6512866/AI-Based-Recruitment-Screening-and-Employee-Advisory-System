@@ -198,7 +198,21 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งใบสมัครไม่สำเร็จ"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งใบสมัครสำเร็จ!"})
+
+	// จำลอง (Mock) การส่งอีเมลรหัสใบสมัครไปยังผู้สมัคร
+	applicationCode := "APP-" + strconv.FormatUint(uint64(app.ID + 10000), 10)
+	println("\n=======================================================")
+	println("[MOCK EMAIL SERVICE] ส่งอีเมลแจ้งเตือนการสมัครงานสำเร็จ!")
+	println("ผู้รับ:", candidate.Email)
+	println("หัวข้อ: ยืนยันการสมัครงานในตำแหน่ง " + job.Title)
+	println("รายละเอียด: ขอบคุณสำหรับการสมัครงาน รหัสใบสมัครของคุณคือ " + applicationCode + " โปรดใช้รหัสนี้ในการตรวจสอบผลการประกาศในอนาคต")
+	println("=======================================================\n")
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":        "ส่งใบสมัครสำเร็จ!",
+		"application_id": app.ID,
+		"application_code": applicationCode,
+	})
 }
 
 // ── สำหรับ HR ดึงรายชื่อผู้สมัครแยกตามตำแหน่งงาน
@@ -309,4 +323,56 @@ func (c *JobPositionController) DeleteApplication(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "ลบผู้สมัครเรียบร้อยแล้ว"})
+}
+
+// GET /api/applications/status/:appCode
+func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
+	appCode := ctx.Param("appCode")
+	if len(appCode) < 5 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครสั้นเกินไป"})
+		return
+	}
+
+	// ลบ prefix APP- (ถ้ามี)
+	parsedStr := appCode
+	if (len(appCode) >= 4) && (appCode[:4] == "APP-" || appCode[:4] == "app-") {
+		parsedStr = appCode[4:]
+	}
+
+	val, err := strconv.ParseUint(parsedStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครไม่ถูกต้อง"})
+		return
+	}
+
+	var appID uint = uint(val)
+	if appID > 10000 {
+		appID -= 10000
+	}
+
+	var app entity.Application
+	// โหลดความสัมพันธ์ของ Candidate และ JobPosition
+	err = c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID).Error
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลใบสมัครงานสำหรับรหัสนี้"})
+		return
+	}
+
+	// ปิดบังนามสกุลบางส่วนเพื่อความเป็นส่วนตัวในการค้นหาแบบสาธารณะ
+	maskedLastName := ""
+	if len(app.Candidate.LastName) > 0 {
+		maskedLastName = string([]rune(app.Candidate.LastName)[0]) + "..."
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"id":             app.ID,
+			"code":           "APP-" + strconv.FormatUint(uint64(app.ID + 10000), 10),
+			"first_name":     app.Candidate.FirstName,
+			"last_name":      maskedLastName,
+			"position_title": app.Position,
+			"status":         app.Status,
+			"created_at":     app.CreatedAt,
+		},
+	})
 }
