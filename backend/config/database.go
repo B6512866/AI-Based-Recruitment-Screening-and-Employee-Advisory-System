@@ -26,6 +26,9 @@ func ConnectDatabase() {
 		panic("Failed to connect database: " + err.Error())
 	}
 
+	//  ResetByDropSchema(db) //Drop ตารางทั้งหมดเลย
+	//  ResetDatabase(db) //ลบข้อมูลในตารางทั้งหมดแล้วค่อย seed
+
 	err = db.AutoMigrate(
 		&entity.Role{},
 		&entity.AIScreening{},

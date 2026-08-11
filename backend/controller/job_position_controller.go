@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -198,6 +199,19 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งใบสมัครสำเร็จ!"})
+
+	// สร้างรหัสประจำตัวใบสมัคร
+	applicationCode := "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10)
+	candidateFullName := candidate.FirstName + " " + candidate.LastName
+
+	// 📧 ส่งอีเมลจริงไปยัง Gmail ของผู้สมัครผ่าน Background Goroutine
+	go services.SendApplicationEmail(candidate.Email, candidateFullName, job.Title, applicationCode)
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":          "ส่งใบสมัครสำเร็จ!",
+		"application_id":   app.ID,
+		"application_code": applicationCode,
+	})
 }
 
 // GET /api/job-positions/:id/applications
@@ -321,4 +335,56 @@ func (c *JobPositionController) DeleteApplication(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "ลบผู้สมัครเรียบร้อยแล้ว"})
+}
+
+// GET /api/applications/status/:appCode
+func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
+	appCode := ctx.Param("appCode")
+	if len(appCode) < 5 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครสั้นเกินไป"})
+		return
+	}
+
+	// ลบ prefix APP- (ถ้ามี)
+	parsedStr := appCode
+	if (len(appCode) >= 4) && (appCode[:4] == "APP-" || appCode[:4] == "app-") {
+		parsedStr = appCode[4:]
+	}
+
+	val, err := strconv.ParseUint(parsedStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครไม่ถูกต้อง"})
+		return
+	}
+
+	var appID uint = uint(val)
+	if appID > 10000 {
+		appID -= 10000
+	}
+
+	var app entity.Application
+	// โหลดความสัมพันธ์ของ Candidate และ JobPosition
+	err = c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID).Error
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลใบสมัครงานสำหรับรหัสนี้"})
+		return
+	}
+
+	// ปิดบังนามสกุลบางส่วนเพื่อความเป็นส่วนตัวในการค้นหาแบบสาธารณะ
+	maskedLastName := ""
+	if len(app.Candidate.LastName) > 0 {
+		maskedLastName = string([]rune(app.Candidate.LastName)[0]) + "..."
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"id":             app.ID,
+			"code":           "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10),
+			"first_name":     app.Candidate.FirstName,
+			"last_name":      maskedLastName,
+			"position_title": app.Position,
+			"status":         app.Status,
+			"created_at":     app.CreatedAt,
+		},
+	})
 }

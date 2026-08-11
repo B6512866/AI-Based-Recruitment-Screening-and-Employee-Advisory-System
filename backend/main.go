@@ -83,6 +83,7 @@ func main() {
 		routes.KnowledgeRoutes(api, config.DB)
 		routes.JobPositionRoutes(api, config.DB)
 		routes.ChatRoutes(api, config.DB)
+		routes.InterviewRoutes(api, config.DB)
 		routes.JobAnnouncementRoutes(api, config.DB)
 		routes.JobCriteriaRoutes(api, config.DB)
 	}

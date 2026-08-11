@@ -123,3 +123,9 @@ export async function deleteapplication(appId: number) {
   const res = await apiClient.delete(`/applications/${appId}`);
   return res.data;
 }
+
+// ── ดึงสถานะใบสมัครสำหรับผู้สมัครสืบค้น
+export async function checkApplicationStatus(appCode: string) {
+  const res = await apiClient.get(`/applications/status/${appCode}`);
+  return res.data;
+}
