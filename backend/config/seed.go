@@ -3,7 +3,69 @@ package config
 import (
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
 	"log"
+	"gorm.io/gorm"
 )
+
+// ใช้เฉพาะตอน DEV เพื่อ Reset id ให้เริ่มตั้งแต่ 0
+func ResetDatabase(db *gorm.DB) {
+	log.Println("Resetting database to ZERO...")
+	sql := `
+		TRUNCATE TABLE
+			roles,
+			users,
+			candidates,
+			applications,
+			resumes,
+			knowledge_bases,
+			interviews,
+			chat_messages,
+			reports,
+			job_positions,
+			ai_screenings
+		RESTART IDENTITY CASCADE;
+	`
+
+	if err := db.Exec(sql).Error; err != nil {
+		log.Println("ResetDatabase error:", err)
+	} else {
+		log.Println("ResetDatabase: all tables truncated and identities restarted.")
+	}
+}
+
+// ================= ใช้กรณีอยากล้างตารางทั้งหมดเลย =================
+func ResetDatabaseByDROP(db *gorm.DB) {
+	log.Println("Drop All Tables")
+	sql := `
+		DROP TABLE IF EXISTS
+			roles,
+			users,
+			candidates,
+			applications,
+			resumes,
+			knowledge_bases,
+			interviews,
+			chat_messages,
+			reports,
+			job_positions,
+			ai_screenings
+		CASCADE;
+	`
+
+	if err := db.Exec(sql).Error; err != nil {
+		log.Println("ResetDatabase error:", err)
+	} else {
+		log.Println("ResetDatabase: all tables dropped.")
+	}
+}
+
+func ResetByDropSchema(db *gorm.DB) error {
+	sql := `
+		DROP SCHEMA public CASCADE;
+		CREATE SCHEMA public;
+		GRANT ALL ON SCHEMA public TO public;
+	`
+	return db.Exec(sql).Error
+}
 
 func SeedAllData() {
 	SeedRoles()
