@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"os"
 
 	"github.com/joho/godotenv"
@@ -17,15 +19,16 @@ type Config struct {
 	FrontendURL  string
 	SMTPEmail    string
 	SMTPPassword string
+	GeminiAPIKey string
 }
 
 var Env Config
 
 func LoadEnv() {
-	godotenv.Load()
+	_ = godotenv.Load()
 
 	Env = Config{
-		BackendPort:  getEnv("PORT", "8080"),
+		BackendPort:  getEnv("BACKEND_PORT", getEnv("PORT", "8080")),
 		DBHost:       getEnv("DB_HOST", "127.0.0.1"),
 		DBUser:       getEnv("DB_USER", "postgres"),
 		DBPass:       getEnv("DB_PASSWORD", "postgres"),
@@ -35,11 +38,18 @@ func LoadEnv() {
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:5173"),
 		SMTPEmail:    getEnv("SMTP_EMAIL", "guymini02479@gmail.com"),
 		SMTPPassword: getEnv("SMTP_PASSWORD", "gjsrvsyeqsixfvlk"),
+		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""), // <--- เพิ่มบรรทัดนี้ครับ!
+	}
+
+	if Env.GeminiAPIKey == "" {
+		fmt.Println("❌ Log Debug: GEMINI_API_KEY is empty!")
+	} else {
+		fmt.Println("🔑 Log Debug: GEMINI_API_KEY loaded successfully")
 	}
 }
 
 func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
+	if value, exists := os.LookupEnv(key); exists && value != "" {
 		return value
 	}
 	return defaultValue

@@ -1,11 +1,15 @@
 package controller
 
 import (
-	"net/http"
-	"strconv"
-
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -21,7 +25,8 @@ func NewJobPositionController(db *gorm.DB) *JobPositionController {
 // GET /api/job-positions
 func (c *JobPositionController) GetAll(ctx *gin.Context) {
 	var jobs []entity.JobPosition
-	if err := c.db.Order("updated_at desc").Find(&jobs).Error; err != nil {
+	// เพิ่ม Preload เพื่อดึงข้อมูล Criteria และ SubCriteria พ่วงมาด้วย
+	if err := c.db.Preload("Criteria.SubCriteria").Order("updated_at desc").Find(&jobs).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลตำแหน่งงานได้"})
 		return
 	}
@@ -32,36 +37,70 @@ func (c *JobPositionController) GetAll(ctx *gin.Context) {
 func (c *JobPositionController) GetByID(ctx *gin.Context) {
 	id := ctx.Param("id")
 	var job entity.JobPosition
-	if err := c.db.First(&job, id).Error; err != nil {
+	// เพิ่ม Preload ที่นี่ด้วยเช่นกัน
+	if err := c.db.Preload("Criteria.SubCriteria").First(&job, id).Error; err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงาน"})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"data": job})
 }
 
-
-
 // POST /api/job-positions
 func (c *JobPositionController) Create(ctx *gin.Context) {
-	var req entity.JobPosition
+	// ใช้ Struct ชั่วคราวเพื่อให้ Criteria รองรับทั้งแบบ String และแบบ Array ได้
+	var req struct {
+		Title       string      `json:"title"`
+		Department  string      `json:"department"`
+		Location    string      `json:"location"`
+		Salary      string      `json:"salary"`
+		Type        string      `json:"type"`
+		Benefits    string      `json:"benefits"`
+		ContactInfo string      `json:"contact_info"`
+		Description string      `json:"description"`
+		Criteria    interface{} `json:"criteria"` // รับได้ทั้ง string หรือ array เพื่อป้องกัน error unmarshal
+		ImageURL    string      `json:"image_url"`
+		Status      string      `json:"status"`
+	}
+
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("ข้อมูลไม่ถูกต้อง: %v", err)})
 		return
 	}
 
 	// ดึง userID จาก AuthMiddleware
 	var userID uint = 1 // default เป็น 1 เผื่อกรณีไม่มี auth
-	if idVal, exists := ctx.Get("id"); exists {
-		if idFloat, ok := idVal.(float64); ok {
-			userID = uint(idFloat)
-		} else if idUint, ok := idVal.(uint); ok {
-			userID = idUint
+	if idVal, exists := ctx.Get("userID"); exists {
+		switch v := idVal.(type) {
+		case float64:
+			userID = uint(v)
+		case uint:
+			userID = v
+		case int:
+			userID = uint(v)
+		}
+	} else if idVal, exists := ctx.Get("id"); exists {
+		switch v := idVal.(type) {
+		case float64:
+			userID = uint(v)
+		case uint:
+			userID = v
+		case int:
+			userID = uint(v)
 		}
 	}
 
 	status := req.Status
 	if status == "" {
 		status = "เปิดรับสมัคร"
+	}
+
+	// แปลง Criteria กลับเป็น []entity.MainCriterion ถ้าส่งมาเป็น struct ปกติ
+	var criteriaList []entity.MainCriterion
+	if req.Criteria != nil {
+		// หากส่งมาเป็นอาเรย์ของ object สามารถแปลงผ่าน JSON roundtrip ได้อย่างปลอดภัย
+		if jsonBytes, err := json.Marshal(req.Criteria); err == nil {
+			json.Unmarshal(jsonBytes, &criteriaList)
+		}
 	}
 
 	job := entity.JobPosition{
@@ -73,13 +112,14 @@ func (c *JobPositionController) Create(ctx *gin.Context) {
 		Benefits:    req.Benefits,
 		ContactInfo: req.ContactInfo,
 		Description: req.Description,
-		Criteria:    req.Criteria,
+		Criteria:    criteriaList,
+		ImageURL:    req.ImageURL,
 		Status:      status,
 		UserID:      userID,
 	}
 
 	if err := c.db.Create(&job).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "สร้างตำแหน่งงานไม่สำเร็จ"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("สร้างตำแหน่งงานไม่สำเร็จ: %v", err)})
 		return
 	}
 
@@ -89,43 +129,315 @@ func (c *JobPositionController) Create(ctx *gin.Context) {
 // PUT /api/job-positions/:id
 func (c *JobPositionController) Update(ctx *gin.Context) {
 	idStr := ctx.Param("id")
+
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ไม่ถูกต้อง"})
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID ไม่ถูกต้อง",
+		})
 		return
 	}
 
-	var req entity.JobPosition
+	// ============================================================
+	// Request Structure
+	// รองรับ JSON โครงสร้างเดียวกับที่ GET /job-positions ส่งกลับ
+	// ============================================================
+
+	type SubCriterionRequest struct {
+		ID              uint    `json:"ID"`
+		CreatedAt       string  `json:"CreatedAt"`
+		UpdatedAt       string  `json:"UpdatedAt"`
+		DeletedAt       any     `json:"DeletedAt"`
+		MainCriterionID uint    `json:"main_criterion_id"`
+		Id              string  `json:"id"`
+		Title           string  `json:"title"`
+		Description     string  `json:"description"`
+		Weight          float64 `json:"weight"`
+	}
+
+	type CriterionRequest struct {
+		ID            uint                  `json:"ID"`
+		CreatedAt     string                `json:"CreatedAt"`
+		UpdatedAt     string                `json:"UpdatedAt"`
+		DeletedAt     any                   `json:"DeletedAt"`
+		JobPositionID uint                  `json:"job_position_id"`
+		Id            string                `json:"id"`
+		Title         string                `json:"title"`
+		Weight        float64               `json:"weight"`
+		SubCriteria   []SubCriterionRequest `json:"sub_criteria"`
+	}
+
+	// ใช้ interface{} กับ Benefits เพื่อรองรับทั้ง
+	// "string"
+	// และ
+	// ["item1", "item2"]
+	type UpdateJobRequest struct {
+		Title       string `json:"title"`
+		Department  string `json:"department"`
+		Location    string `json:"location"`
+		Salary      string `json:"salary"`
+		Type        string `json:"type"`
+		ContactInfo string `json:"contact_info"`
+
+		Description string `json:"description"`
+
+		// รองรับทั้ง String และ Array
+		Benefits interface{} `json:"benefits"`
+
+		Criteria []CriterionRequest `json:"criteria"`
+
+		ImageURL string `json:"image_url"`
+		Status   string `json:"status"`
+	}
+
+	var req UpdateJobRequest
+
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":   "ข้อมูลไม่ถูกต้อง",
+			"details": err.Error(),
+		})
 		return
 	}
+
+	// ============================================================
+	// แปลง Benefits
+	// ============================================================
+
+	var benefits string
+
+	switch value := req.Benefits.(type) {
+
+	case string:
+		// ถ้า frontend ส่งมาเป็น string
+		benefits = value
+
+	case []interface{}:
+		// ถ้า frontend ส่งมาเป็น array
+		var benefitList []string
+
+		for _, item := range value {
+			if text, ok := item.(string); ok {
+				benefitList = append(benefitList, text)
+			}
+		}
+
+		// เก็บใน DB เป็น string แบบเดิม
+		benefits = strings.Join(benefitList, "\n")
+
+	case nil:
+		benefits = ""
+
+	default:
+		// fallback กรณีข้อมูลรูปแบบอื่น
+		jsonBytes, marshalErr := json.Marshal(value)
+
+		if marshalErr == nil {
+			benefits = string(jsonBytes)
+		}
+	}
+
+	// ============================================================
+	// Transaction
+	// ============================================================
+
+	tx := c.db.Begin()
+
+	if tx.Error != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถเริ่ม Transaction ได้",
+		})
+		return
+	}
+
+	// ============================================================
+	// 1. ค้นหา JobPosition
+	// ============================================================
 
 	var job entity.JobPosition
-	if err := c.db.First(&job, id).Error; err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงาน"})
+
+	if err := tx.First(&job, uint(id)).Error; err != nil {
+
+		tx.Rollback()
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"error": "ไม่พบตำแหน่งงาน",
+			})
+			return
+		}
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถค้นหาตำแหน่งงานได้",
+		})
 		return
 	}
+
+	// ============================================================
+	// 2. Update ข้อมูล JobPosition
+	// ============================================================
 
 	job.Title = req.Title
 	job.Department = req.Department
 	job.Location = req.Location
 	job.Salary = req.Salary
 	job.Type = req.Type
-	job.Benefits = req.Benefits
+	job.Benefits = benefits
 	job.ContactInfo = req.ContactInfo
 	job.Description = req.Description
-	job.Criteria = req.Criteria
+	job.ImageURL = req.ImageURL
+
 	if req.Status != "" {
 		job.Status = req.Status
 	}
 
-	if err := c.db.Save(&job).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "อัปเดตตำแหน่งงานไม่สำเร็จ"})
+	if err := tx.Save(&job).Error; err != nil {
+
+		tx.Rollback()
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถอัปเดตข้อมูลตำแหน่งงานได้",
+		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "อัปเดตข้อมูลสำเร็จ", "data": job})
+	// ============================================================
+	// 3. ลบ SubCriteria เดิม
+	// ============================================================
+
+	var oldCriteria []entity.MainCriterion
+
+	if err := tx.
+		Where("job_position_id = ?", job.ID).
+		Find(&oldCriteria).Error; err != nil {
+
+		tx.Rollback()
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถค้นหา Criteria เดิมได้",
+		})
+		return
+	}
+
+	// ลบ SubCriteria ที่อยู่ภายใต้ Criteria เดิม
+	for _, criterion := range oldCriteria {
+
+		if err := tx.
+			Where("main_criterion_id = ?", criterion.ID).
+			Delete(&entity.SubCriterion{}).Error; err != nil {
+
+			tx.Rollback()
+
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "ไม่สามารถลบ SubCriteria เดิมได้",
+			})
+			return
+		}
+	}
+
+	// ============================================================
+	// 4. ลบ Main Criteria เดิม
+	// ============================================================
+
+	if err := tx.
+		Where("job_position_id = ?", job.ID).
+		Delete(&entity.MainCriterion{}).Error; err != nil {
+
+		tx.Rollback()
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถลบ Criteria เดิมได้",
+		})
+		return
+	}
+
+	// ============================================================
+	// 5. สร้าง Criteria ใหม่
+	// ============================================================
+
+	for _, criterionReq := range req.Criteria {
+
+		criterion := entity.MainCriterion{
+			JobPositionID: job.ID,
+			CriterionID:   criterionReq.Id,
+			Title:         criterionReq.Title,
+			Weight:        criterionReq.Weight,
+		}
+
+		if err := tx.Create(&criterion).Error; err != nil {
+
+			tx.Rollback()
+
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "ไม่สามารถบันทึก Criteria ได้",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// ========================================================
+		// 6. สร้าง SubCriteria
+		// ========================================================
+
+		for _, subReq := range criterionReq.SubCriteria {
+
+			subCriterion := entity.SubCriterion{
+				MainCriterionID: criterion.ID,
+				SubCriterionID:  subReq.Id,
+				Title:           subReq.Title,
+				Description:     subReq.Description,
+				Weight:          subReq.Weight,
+			}
+
+			if err := tx.Create(&subCriterion).Error; err != nil {
+
+				tx.Rollback()
+
+				ctx.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "ไม่สามารถบันทึก SubCriteria ได้",
+					"details": err.Error(),
+				})
+				return
+			}
+		}
+	}
+
+	// ============================================================
+	// 7. Commit
+	// ============================================================
+
+	if err := tx.Commit().Error; err != nil {
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ไม่สามารถบันทึกข้อมูลได้",
+		})
+		return
+	}
+
+	// ============================================================
+	// 8. โหลดข้อมูลใหม่พร้อม Criteria + SubCriteria
+	// ============================================================
+
+	var updatedJob entity.JobPosition
+
+	if err := c.db.
+		Preload("Criteria.SubCriteria").
+		First(&updatedJob, job.ID).Error; err != nil {
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "บันทึกสำเร็จแต่ไม่สามารถโหลดข้อมูลล่าสุดได้",
+		})
+		return
+	}
+
+	// ============================================================
+	// Response
+	// ============================================================
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "อัปเดตข้อมูลตำแหน่งงานสำเร็จ",
+		"data":    updatedJob,
+	})
 }
 
 // DELETE /api/job-positions/:id
@@ -366,7 +678,7 @@ func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"id":             app.ID,
-			"code":           "APP-" + strconv.FormatUint(uint64(app.ID + 10000), 10),
+			"code":           "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10),
 			"first_name":     app.Candidate.FirstName,
 			"last_name":      maskedLastName,
 			"position_title": app.Position,
