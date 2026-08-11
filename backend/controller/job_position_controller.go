@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -199,18 +200,16 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		return
 	}
 
-	// จำลอง (Mock) การส่งอีเมลรหัสใบสมัครไปยังผู้สมัคร
-	applicationCode := "APP-" + strconv.FormatUint(uint64(app.ID + 10000), 10)
-	println("\n=======================================================")
-	println("[MOCK EMAIL SERVICE] ส่งอีเมลแจ้งเตือนการสมัครงานสำเร็จ!")
-	println("ผู้รับ:", candidate.Email)
-	println("หัวข้อ: ยืนยันการสมัครงานในตำแหน่ง " + job.Title)
-	println("รายละเอียด: ขอบคุณสำหรับการสมัครงาน รหัสใบสมัครของคุณคือ " + applicationCode + " โปรดใช้รหัสนี้ในการตรวจสอบผลการประกาศในอนาคต")
-	println("=======================================================\n")
+	// สร้างรหัสประจำตัวใบสมัคร
+	applicationCode := "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10)
+	candidateFullName := candidate.FirstName + " " + candidate.LastName
+
+	// 📧 ส่งอีเมลจริงไปยัง Gmail ของผู้สมัครผ่าน Background Goroutine
+	go services.SendApplicationEmail(candidate.Email, candidateFullName, job.Title, applicationCode)
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message":        "ส่งใบสมัครสำเร็จ!",
-		"application_id": app.ID,
+		"message":          "ส่งใบสมัครสำเร็จ!",
+		"application_id":   app.ID,
 		"application_code": applicationCode,
 	})
 }
