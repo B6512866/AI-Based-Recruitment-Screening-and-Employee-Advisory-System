@@ -1205,7 +1205,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
     ===================================================== */
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="p-8 space-y-6 h-[calc(100vh-5.5rem)] flex flex-col min-h-0">
             {/* =================================================
                 HEADER
             ================================================= */}
@@ -1279,12 +1279,12 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                 MAIN GRID
             ================================================= */}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
                 {/* =================================================
                     LEFT - JOB LIST
                 ================================================= */}
 
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[750px] overflow-hidden">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2">
                             <Briefcase className="w-4 h-4 text-slate-400" />
@@ -1444,7 +1444,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                     RIGHT
                 ================================================= */}
 
-                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[750px] overflow-hidden">
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
                     {!selectedJob &&
                     !isCreating ? (
                         <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-8">
