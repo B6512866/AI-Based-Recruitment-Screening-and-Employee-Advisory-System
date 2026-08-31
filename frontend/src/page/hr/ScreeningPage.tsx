@@ -64,10 +64,19 @@ export default function ScreeningPage() {
     const [manualSubmitting, setManualSubmitting] = useState(false);
     const [manualError, setManualError] = useState("");
 
-    const parseCriteria = (text: string) => {
+    const parseCriteria = (text: any) => {
         const criteriaMap: { [key: string]: { name: string; max: number } } = {};
         if (!text) {
             return { cat_1: { name: "ความเหมาะสมโดยรวม", max: 100 } };
+        }
+        if (Array.isArray(text)) {
+            text.forEach((c: any, idx: number) => {
+                criteriaMap[`cat_${idx + 1}`] = {
+                    name: c.title || "",
+                    max: c.weight || 0
+                };
+            });
+            return criteriaMap;
         }
         const lines = text.split("\n");
         let count = 1;
@@ -411,7 +420,10 @@ export default function ScreeningPage() {
                 userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jdText}`;
             }
             if (criteriaText) {
-                userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${criteriaText}`;
+                const formattedCriteria = Array.isArray(criteriaText)
+                    ? criteriaText.map((c: any) => `- ${c.title} (น้ำหนัก ${c.weight}คะแนน): ` + (c.sub_criteria?.map((sc: any) => `${sc.title} (${sc.description})`).join(", ") || "")).join("\n")
+                    : criteriaText;
+                userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${formattedCriteria}`;
                 
                 const listStr = Object.values(criteriaMap)
                     .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
@@ -1566,63 +1578,67 @@ ${tableRowsExample}
                             <hr className="border-slate-100" />
 
                             {/* Section 3: Resume */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">3. ข้อมูล Resume (ประวัติย่อการทำงาน) *</h4>
-                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
-                                        อัปโหลดไฟล์ดึงข้อความ
-                                        <input
-                                            type="file"
-                                            accept=".txt,.pdf,image/*"
-                                            className="hidden"
-                                            onChange={e => e.target.files?.[0] && handleManualResumeUpload(e.target.files[0])}
-                                        />
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">3. อัปโหลด Resume (.pdf, .txt, รูปภาพ) *</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-[#4169E1] transition-all bg-slate-50/50">
+                                    <input
+                                        type="file"
+                                        accept=".txt,.pdf,image/*"
+                                        required
+                                        id="manual-resume-uploader"
+                                        className="hidden"
+                                        onChange={e => e.target.files?.[0] && handleManualResumeUpload(e.target.files[0])}
+                                    />
+                                    <label htmlFor="manual-resume-uploader" className="cursor-pointer block space-y-2">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
+                                            <Upload className="w-5 h-5" />
+                                        </div>
+                                        {manualResumeFileName ? (
+                                            <div>
+                                                <p className="text-xs font-bold text-[#4169E1]">{manualResumeFileName}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600">คลิกที่นี่เพื่อเลือกไฟล์ Resume</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">รองรับไฟล์ PDF, TXT หรือรูปภาพ</p>
+                                            </div>
+                                        )}
                                     </label>
                                 </div>
-                                {manualResumeFileName && (
-                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
-                                        ไฟล์ประวัติย่อ: {manualResumeFileName}
-                                    </div>
-                                )}
-                                <textarea
-                                    required
-                                    value={manualResumeText}
-                                    onChange={e => setManualResumeText(e.target.value)}
-                                    placeholder="พิมพ์ประวัติย่อ หรือ วางข้อมูล Resume ที่นี่..."
-                                    rows={8}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
-                                />
                             </div>
 
                             <hr className="border-slate-100" />
 
                             {/* Section 4: Transcript */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">4. ข้อมูล Transcript (ผลการศึกษา) *</h4>
-                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
-                                        อัปโหลดไฟล์ดึงข้อความ
-                                        <input
-                                            type="file"
-                                            accept=".txt,.pdf,image/*"
-                                            className="hidden"
-                                            onChange={e => e.target.files?.[0] && handleManualTranscriptUpload(e.target.files[0])}
-                                        />
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">4. อัปโหลด Transcript / ใบแสดงผลการศึกษา *</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-[#4169E1] transition-all bg-slate-50/50">
+                                    <input
+                                        type="file"
+                                        accept=".txt,.pdf,image/*"
+                                        required
+                                        id="manual-transcript-uploader"
+                                        className="hidden"
+                                        onChange={e => e.target.files?.[0] && handleManualTranscriptUpload(e.target.files[0])}
+                                    />
+                                    <label htmlFor="manual-transcript-uploader" className="cursor-pointer block space-y-2">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
+                                            <Upload className="w-5 h-5" />
+                                        </div>
+                                        {manualTranscriptFileName ? (
+                                            <div>
+                                                <p className="text-xs font-bold text-[#4169E1]">{manualTranscriptFileName}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600">คลิกที่นี่เพื่อเลือกไฟล์ Transcript</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">รองรับไฟล์ PDF, TXT หรือรูปภาพ</p>
+                                            </div>
+                                        )}
                                     </label>
                                 </div>
-                                {manualTranscriptFileName && (
-                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
-                                        ไฟล์ผลการศึกษา: {manualTranscriptFileName}
-                                    </div>
-                                )}
-                                <textarea
-                                    required
-                                    value={manualTranscriptText}
-                                    onChange={e => setManualTranscriptText(e.target.value)}
-                                    placeholder="พิมพ์ หรือ วางข้อมูลเกรดและรายวิชาจาก Transcript ที่นี่..."
-                                    rows={5}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-350 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
-                                />
                             </div>
 
                             {/* Modal Footer */}
