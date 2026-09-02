@@ -38,7 +38,7 @@ export const hrMenuItems: MenuItem[] = [
     },
     {
         id: "documents",
-        label: "เอกสารสัมภาษณ์และคัดเลือก",
+        label: "อัปโหลดเอกสารประกอบการสัมภาษณ์",
         icon: Upload,
         path: "/hr/upload-documents",
     },
