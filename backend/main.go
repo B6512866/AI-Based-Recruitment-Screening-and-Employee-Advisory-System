@@ -55,10 +55,12 @@ func main() {
 	r.Use(middleware.CORSMiddleware())
 
 	r.Static("/uploads/jobs", "./uploads/jobs")
+	r.Static("/upload", "./upload")
 
 	api := r.Group("/api")
 	{
 		api.Static("/upload", "./upload")
+		api.Static("/uploads/jobs", "./uploads/jobs")
 
 		api.POST("/upload", func(ctx *gin.Context) {
 			file, err := ctx.FormFile("file")

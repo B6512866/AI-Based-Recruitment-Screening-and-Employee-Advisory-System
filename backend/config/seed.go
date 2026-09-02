@@ -167,21 +167,51 @@ func SeedAIScreening() {}
 func SeedResumes()     {}
 
 func SeedKnowledgeBase() {
-	var count int64
-	DB.Model(&entity.KnowledgeBase{}).Count(&count)
-	if count == 0 {
-		var hrUser entity.User
-		if err := DB.Where("email = ?", "hr@gmail.com").First(&hrUser).Error; err != nil {
-			log.Println("SeedKnowledgeBase error: hr@gmail.com user not found")
-			return
-		}
+	var hrUser entity.User
+	if err := DB.Where("email = ?", "hr@gmail.com").First(&hrUser).Error; err != nil {
+		log.Println("SeedKnowledgeBase error: hr@gmail.com user not found")
+		return
+	}
 
-		// 1. กำหนดอาร์เรย์ (Slice) ของเอกสารแยกตามหมวดหมู่
-		docs := []entity.KnowledgeBase{
-			{
-				Filename: "นโยบายการลาหยุด.txt",
-				UserID:   hrUser.ID,
-				Content: `=== การลาหยุด ===
+	// 1. กำหนดอาร์เรย์ (Slice) ของเอกสารระเบียบองค์กรและนโยบายแยกตามหมวดหมู่
+	docs := []entity.KnowledgeBase{
+		{
+			Filename: "ระเบียบและข้อบังคับในการทำงานขององค์กร.txt",
+			UserID:   hrUser.ID,
+			Content: `=== ระเบียบและข้อบังคับในการทำงานขององค์กร ===
+
+1. ข้อบังคับเรื่องเวลาทำงานและการลงเวลา (Working Hours & Attendance)
+- เวลาทำการปกติ: วันจันทร์ - ศุกร์ เวลา 08:30 - 17:30 น. (พักเที่ยง 12:00 - 13:00 น.)
+- พนักงานต้องลงเวลาเข้า-ออกงานผ่านระบบสแกนใบหน้าหรือแอปพลิเคชัน HR Mobile
+- การมาสายเกิน 15 นาที โดยไม่แจ้งเหตุจำเป็นล่วงหน้า ถือเป็นการมาสาย หากมาสายเกิน 3 ครั้งต่อเดือน จะมีหนังสือตักเตือนทางวินัย
+
+2. สิทธิ์การลาและการอนุมัติ (Leave Policy)
+- ลาป่วย: สิทธิ์สูงสุด 30 วันต่อปี (ลาติดต่อกัน 3 วันทำการขึ้นไปต้องมีใบรับรองแพทย์)
+- ลาพักร้อน: พนักงานที่ผ่านการทดลองงานครบ 1 ปี ได้รับสิทธิ์ 10 วันต่อปี (สะสมไปปีถัดไปได้ไม่เกิน 5 วัน)
+- ลากิจจำเป็น: สิทธิ์ 3 วันต่อปี โดยต้องยื่นคำขออนุมัติล่วงหน้าอย่างน้อย 3 วันทำการ
+- ลาคลอดบุตร: พนักงานหญิงมีสิทธิ์ลาคลอด 98 วัน (บริษัทจ่ายค่าจ้างเต็มจำนวน 45 วัน)
+
+3. วินัยและมาตรการการลงโทษ (Disciplinary Rules)
+- การตักเตือนด้วยวาจา: สำหรับความผิดลหุโทษครั้งแรก
+- หนังสือตักเตือนเป็นลายลักษณ์อักษร: สำหรับการมาสายสะสม การละทิ้งหน้าที่ หรือกระทำผิดซ้ำ
+- การพักงานโดยไม่ได้รับค่าจ้าง: สำหรับความผิดร้ายแรงปานกลาง
+- การเลิกจ้างโดยไม่จ่ายค่าชดเชย: สำหรับการทุจริต เปิดเผยความลับองค์กร หรือเสพสิ่งเสพติดในสถานที่ทำงาน
+
+4. นโยบายความปลอดภัยและเทคโนโลยีสารสนเทศ (IT & Cybersecurity Policy)
+- พนักงานต้องรักษาความลับรหัสผ่าน (Password) และเปลี่ยนรหัสผ่านทุก 90 วัน
+- ห้ามนำข้อมูลลูกค้าหรือข้อมูลความลับของบริษัทออกนอกระบบโดยไม่ได้รับอนุญาต (PDPA Compliance)
+- ห้ามติดตั้งซอฟต์แวร์ผิดลิขสิทธิ์หรือซอฟต์แวร์ที่ไม่ได้รับอนุมัติบนเครื่องคอมพิวเตอร์บริษัท
+- อุปกรณ์โน้ตบุ๊กและทรัพย์สินบริษัทต้องได้รับการดูแลอย่างดี ห้ามนำออกนอกสถานที่โดยไม่มีใบอนุญาต
+
+5. การแต่งกายและจริยธรรมองค์กร (Dress Code & Code of Conduct)
+- วันจันทร์ - พฤหัสบดี: แต่งกายชุดสุภาพ Business Casual
+- วันศุกร์: แต่งกายแบบ Casual Day (ห้ามสวมกางเกงขาสั้น สายเดี่ยว หรือรองเท้าแตะ)
+- การปฏิบัติตน: ให้เกียรติเพื่อนร่วมงาน ปราศจากการคุกคามทุกรูปแบบ (Zero Tolerance for Harassment)`,
+		},
+		{
+			Filename: "นโยบายการลาหยุด.txt",
+			UserID:   hrUser.ID,
+			Content: `=== การลาหยุด ===
 - ลาป่วย: ได้สูงสุด 30 วันต่อปี โดยไม่ต้องมีใบรับรองแพทย์สำหรับการลาไม่เกิน 2 วัน
 - ลาพักร้อน: พนักงานที่ทำงานครบ 1 ปี ได้รับสิทธิ์ลาพักร้อน 10 วันต่อปี
 - ลากิจ: ได้สูงสุด 3 วันต่อปี
@@ -192,28 +222,28 @@ func SeedKnowledgeBase() {
 2. กรอกแบบฟอร์มการลาในระบบ HR Online
 3. รอการอนุมัติจากหัวหน้างาน
 4. ได้รับการแจ้งผลทาง Email ภายใน 1 วันทำการ`,
-			},
-			{
-				Filename: "เวลาทำงานและล่วงเวลา.txt",
-				UserID:   hrUser.ID,
-				Content: `=== เวลาทำงาน ===
+		},
+		{
+			Filename: "เวลาทำงานและล่วงเวลา.txt",
+			UserID:   hrUser.ID,
+			Content: `=== เวลาทำงาน ===
 - เวลาทำงานปกติ: 08:30 - 17:30 น. วันจันทร์ - ศุกร์
 - พักเที่ยง: 12:00 - 13:00 น.
 - การทำงานล่วงเวลา (OT): ได้รับค่าตอบแทน 1.5 เท่าของค่าจ้างปกติ`,
-			},
-			{
-				Filename: "สวัสดิการพนักงาน.txt",
-				UserID:   hrUser.ID,
-				Content: `=== สวัสดิการ ===
+		},
+		{
+			Filename: "สวัสดิการพนักงาน.txt",
+			UserID:   hrUser.ID,
+			Content: `=== สวัสดิการ ===
 - ประกันสุขภาพ: บริษัทจัดให้ครอบคลุมวงเงิน 100,000 บาทต่อปี
 - ประกันชีวิต: คุ้มครอง 10 เท่าของเงินเดือน
 - กองทุนสำรองเลี้ยงชีพ: บริษัทสมทบ 5% ของเงินเดือน
 - เงินโบนัส: พิจารณาจากผลประกอบการบริษัทและผลงานพนักงาน ปีละ 1-2 ครั้ง`,
-			},
-			{
-				Filename: "กฎระเบียบและการประเมินผลงาน.txt",
-				UserID:   hrUser.ID,
-				Content: `=== การประเมินผลงาน ===
+		},
+		{
+			Filename: "กฎระเบียบและการประเมินผลงาน.txt",
+			UserID:   hrUser.ID,
+			Content: `=== การประเมินผลงาน ===
 - ประเมินปีละ 2 ครั้ง คือเดือนมีนาคม และกันยายน
 - เกณฑ์การประเมิน: ผลงาน 60%, ทัศนคติ 20%, การพัฒนาตนเอง 20%
 - พนักงานที่ได้คะแนนดีเยี่ยมมีสิทธิ์ได้รับการปรับเงินเดือน
@@ -225,15 +255,17 @@ func SeedKnowledgeBase() {
 === การใช้อุปกรณ์บริษัท ===
 - ห้ามนำอุปกรณ์ของบริษัทออกนอกสถานที่โดยไม่ได้รับอนุญาต
 - ห้ามติดตั้งซอฟต์แวร์ที่ไม่ได้รับอนุญาตลงในคอมพิวเตอร์บริษัท`,
-			},
-		}
+		},
+	}
 
-		// 2. ใช้ลูปสำหรับบันทึกทีละเอกสาร
-		for _, doc := range docs {
+	// 2. ตรวจสอบและบันทึกเอกสารถ้ายังไม่มีในระบบ (FirstOrCreate)
+	for _, doc := range docs {
+		var existing entity.KnowledgeBase
+		if err := DB.Where("filename = ?", doc.Filename).First(&existing).Error; err != nil {
 			if err := DB.Create(&doc).Error; err != nil {
 				log.Println("SeedKnowledgeBase failed for", doc.Filename, ":", err)
 			} else {
-				log.Println("✅ Seeded document:", doc.Filename)
+				log.Println("✅ Seeded new document:", doc.Filename)
 			}
 		}
 	}
@@ -587,6 +619,86 @@ Email: recruitment@hireai.co.th`,
 							Title:          "ทักษะการสื่อสารในองค์กร",
 							Description:    "แย่: ขาดทักษะการเจรจาและสื่อสารกับผู้อื่นอย่างเป็นระบบ",
 							Weight:         0,
+						},
+					},
+				},
+			},
+			UserID: hrUser.ID,
+		},
+		{
+			Title:      "Software Quality Assurance Tester (QA Tester)",
+			Department: "Quality Assurance & Testing",
+			Location:   "กรุงเทพมหานคร (BTS พญาไท / Hybrid)",
+			Salary:     "35,000 - 55,000 บาท",
+			Type:       "งานเต็มเวลา (Full-time)",
+			Status:     "เปิดรับสมัคร",
+			Benefits: `- ประกันสุขภาพกลุ่มและทันตกรรม
+- กองทุนสำรองเลี้ยงชีพ
+- โบนัสตามผลงานประจำปี
+- สนับสนุนคอร์สอบรมและสอบใบรับรอง ISTQB`,
+			ContactInfo: `ส่ง Resume และตัวอย่าง Test Case/Test Plan มาที่:
+Email: qa-recruitment@hireai.co.th`,
+			Description: `ลักษณะงาน:
+- ออกแบบ จัดทำ Test Plan, Test Cases, และ Test Scenarios สำหรับ Web/Mobile Application
+- ดำเนินการทดสอบแบบ Manual Testing และเขียน Script สำหรับ Automation Testing (Selenium, Cypress หรือ Playwright)
+- บันทึก ติดตาม และประสานงานแก้ไขข้อผิดพลาด (Defect/Bug Tracking) ร่วมกับทีม Software Engineer
+- ตรวจสอบคุณภาพซอฟต์แวร์ตามมาตรฐานและข้อกำหนดของระบบก่อน Release`,
+			Criteria: []entity.MainCriterion{
+				{
+					CriterionID: "c1",
+					Title:       "Technical Software Testing Skills",
+					Weight:      40,
+					SubCriteria: []entity.SubCriterion{
+						{
+							SubCriterionID: "s1_1",
+							Title:          "Manual & Automation Testing",
+							Description:    "มีประสบการณ์ออกแบบ Test Case, Manual Testing และ Automation Testing 1-3 ปีขึ้นไป",
+							Weight:         20,
+						},
+						{
+							SubCriterionID: "s1_2",
+							Title:          "API Testing & Bug Tracking Tools",
+							Description:    "ใช้งาน Postman, Jira, Git และเครื่องมือติดตาม Defect/Bug ได้อย่างมีประสิทธิภาพ",
+							Weight:         20,
+						},
+					},
+				},
+				{
+					CriterionID: "c2",
+					Title:       "QA Process & Analytical Thinking",
+					Weight:      30,
+					SubCriteria: []entity.SubCriterion{
+						{
+							SubCriterionID: "s2_1",
+							Title:          "กระบวนการ QA และการวิเคราะห์เชิงลึก",
+							Description:    "เข้าใจ Software Development Life Cycle (SDLC/STLC) และมีทักษะวิเคราะห์แบบจับผิดความเสี่ยง",
+							Weight:         30,
+						},
+					},
+				},
+				{
+					CriterionID: "c3",
+					Title:       "Collaboration & Soft Skills",
+					Weight:      20,
+					SubCriteria: []entity.SubCriterion{
+						{
+							SubCriterionID: "s3_1",
+							Title:          "การสื่อสารและการทำงานร่วมกับทีมพัฒนา",
+							Description:    "สื่อสารประเด็นปัญหาได้ชัดเจน ตรงไปตรงมา มีทัศนคติที่ดีในการทำงานร่วมกับโปรแกรมเมอร์",
+							Weight:         20,
+						},
+					},
+				},
+				{
+					CriterionID: "c4",
+					Title:       "Educational Background & Certification",
+					Weight:      10,
+					SubCriteria: []entity.SubCriterion{
+						{
+							SubCriterionID: "s4_1",
+							Title:          "วุฒิการศึกษาหรือใบรับรอง",
+							Description:    "ปริญญาตรีวิทยาการคอมพิวเตอร์ เทคโนโลยีสารสนเทศ หรือมีใบรับรองด้าน QA (ISTQB)",
+							Weight:         10,
 						},
 					},
 				},

@@ -309,7 +309,7 @@ export default function ScreeningPage() {
         try {
             const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(3000) });
             const d = await r.json();
-            setOnline(d.chat_model === true);
+            setOnline(d.status === "ok" || d.chat_model === true);
         } catch {
             setOnline(false);
         }
@@ -379,31 +379,52 @@ export default function ScreeningPage() {
             if (!resumeText && app.resume_url) {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
                 
-                const cleanResumeUrl = app.resume_url.startsWith("/api") 
-                    ? app.resume_url.slice(4) 
-                    : app.resume_url;
-                    
-                const response = await apiClient.get(cleanResumeUrl, {
-                    responseType: "blob"
-                });
-                const blob = response.data;
+                // Normalizing URL path
+                let cleanPath = app.resume_url.replace(/\\/g, "/");
+                if (cleanPath.startsWith("/api")) {
+                    cleanPath = cleanPath.slice(4);
+                }
+                if (!cleanPath.startsWith("/")) {
+                    cleanPath = "/" + cleanPath;
+                }
+                
+                const baseBackendUrl = (apiClient.defaults.baseURL || "http://localhost:8080/api").replace(/\/api\/?$/, "");
+                console.log("[OCR] Fetching resume file via apiClient:", cleanPath, "with baseURL:", baseBackendUrl);
+                
+                let blob: Blob;
+                try {
+                    const fileRes = await apiClient.get(cleanPath, {
+                        responseType: "blob",
+                        baseURL: baseBackendUrl,
+                    });
+                    blob = fileRes.data;
+                } catch (fetchErr: any) {
+                    console.error("[OCR File Fetch Error]", fetchErr);
+                    throw new Error(`ไม่สามารถดาวน์โหลดไฟล์ Resume (${cleanPath}) ได้: ${fetchErr.message || "ไม่พบไฟล์บนเซิร์ฟเวอร์"}`);
+                }
+
                 const filename = app.resume_url.split("/").pop() || "resume.pdf";
-                const file = new File([blob], filename, { type: blob.type });
+                const file = new File([blob], filename, { type: blob.type || "application/pdf" });
                 
                 const formData = new FormData();
                 formData.append("file", file);
                 
-                const ocrRes = await fetch(`${TYPHOON_API}/ocr`, {
-                    method: "POST",
-                    body: formData
-                });
-                if (!ocrRes.ok) throw new Error("OCR แปลงข้อความไม่สำเร็จ");
-                const ocrData = await ocrRes.json();
-                resumeText = ocrData.text || "";
+                try {
+                    const ocrRes = await fetch(`${TYPHOON_API}/ocr`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    if (!ocrRes.ok) throw new Error(`HTTP ${ocrRes.status}`);
+                    const ocrData = await ocrRes.json();
+                    resumeText = ocrData.text || "";
+                } catch (ocrErr: any) {
+                    console.error("[OCR Service Error]", ocrErr);
+                    throw new Error(`ไม่สามารถเชื่อมต่อบริการ Typhoon AI OCR (${TYPHOON_API}/ocr) ได้: ${ocrErr.message || "Failed to fetch"}`);
+                }
             }
 
             if (!resumeText) {
-                throw new Error("ไม่มีข้อความ Resume หรือไฟล์แนบ");
+                throw new Error("ผู้สมัครรายนี้ยังไม่มีข้อความ Resume หรือไฟล์แนบในระบบ");
             }
 
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ai" }));
@@ -426,7 +447,7 @@ export default function ScreeningPage() {
                 userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${formattedCriteria}`;
                 
                 const listStr = Object.values(criteriaMap)
-                    .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
+                    .map((info) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
                     .join("\n");
                 
                 const tableRowsExample = Object.values(criteriaMap)
@@ -462,7 +483,7 @@ ${tableRowsExample}
                 }),
             });
 
-            if (!response.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ");
+            if (!response.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ กรุณาตรวจสอบบริการ Typhoon AI");
 
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();
@@ -527,6 +548,7 @@ ${tableRowsExample}
         } catch (err: any) {
             console.error(`Error screening application ${app.ID}:`, err);
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "error" }));
+            alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
         }
     };
 
@@ -1108,8 +1130,7 @@ ${tableRowsExample}
                                                         );
                                                     })}
                                                 </div>
-
-                                                {/* Total Average Bar */}
+{/* Total Average Bar */}
                                                 {(() => {
                                                     const entries = Object.values(breakdown) as { score: number; max: number }[];
                                                     const totalScore = entries.reduce((s, e) => s + e.score, 0);
@@ -1209,7 +1230,7 @@ ${tableRowsExample}
                         </div>
                     )}
 
-                    {/* Results cards rendering */}
+                    {/* Results list rendering - Sleek Horizontal Rows (High to Low PTS) */}
                     {!loadingApplicants && selectedJobId && selectedJobId !== "custom" && (
                         <>
                             {applicants.length === 0 ? (
@@ -1217,249 +1238,179 @@ ${tableRowsExample}
                                     ยังไม่มีผู้สมัครส่งใบสมัครเข้ามาในตำแหน่งงานนี้
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {applicants.map((app, idx) => {
-                                        const candidateName = app.Candidate 
-                                            ? `${app.Candidate.first_name} ${app.Candidate.last_name}` 
-                                            : "ไม่ระบุชื่อผู้สมัคร";
-                                        
-                                        const resumeName = app.resume_url 
-                                            ? app.resume_url.split("/").pop() 
-                                            : "Resume.pdf";
+                                <div className="flex flex-col gap-3 font-sans">
+                                    {[...applicants]
+                                        .sort((a, b) => (b.AIScreening?.skill_score || 0) - (a.AIScreening?.skill_score || 0))
+                                        .map((app, idx) => {
+                                            const candidateName = app.Candidate 
+                                                ? `${app.Candidate.first_name} ${app.Candidate.last_name}` 
+                                                : "ไม่ระบุชื่อผู้สมัคร";
+                                            
+                                            const hasScore = !!app.AIScreening;
+                                            const score = app.AIScreening?.skill_score || 0;
+                                            const status = analyzingStates[app.ID] || (hasScore ? "done" : "idle");
 
-                                        const hasScore = !!app.AIScreening;
-                                        const score = app.AIScreening?.skill_score || 0;
-                                        const status = analyzingStates[app.ID] || (hasScore ? "done" : "idle");
+                                            const scoreColor = score >= 80 
+                                                ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                                                : score >= 50 
+                                                    ? "bg-amber-50 text-amber-600 border-amber-200" 
+                                                    : score > 0 
+                                                        ? "bg-rose-50 text-rose-600 border-rose-200" 
+                                                        : "bg-slate-100 text-slate-500 border-slate-200";
 
-                                        const scoreColor = score >= 80 
-                                            ? "text-emerald-500" 
-                                            : score >= 50 
-                                                ? "text-amber-500" 
-                                                : "text-rose-500";
-
-                                        // Parse criteria
-                                        const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
-                                        const criteriaMap = parseCriteria(matchedJob?.criteria || "");
-                                        const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
-                                        const cleanStrengths = getCleanStrengths(app.AIScreening?.strengths);
-                                        
-                                        return (
-                                            <div key={idx} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all font-sans flex flex-col space-y-4 relative">
-                                                
-                                                {/* Header */}
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex items-center gap-3 col-span-2">
-                                                        <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-[#4169E1] shrink-0">
-                                                            <FileText className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h4 className="font-bold text-slate-800 text-sm truncate max-w-[200px]" title={candidateName}>
-                                                                {candidateName}
-                                                            </h4>
-                                                            <p className="text-xs text-slate-400 truncate max-w-[200px]" title={resumeName}>
-                                                                {resumeName}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right shrink-0">
-                                                        {status === "ocr" && (
-                                                            <span className="text-xs text-amber-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> OCR สแกนไฟล์...
-                                                            </span>
-                                                        )}
-                                                        {status === "ai" && (
-                                                            <span className="text-xs text-blue-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> AI คัดกรอง...
-                                                            </span>
-                                                        )}
-                                                        {status === "saving" && (
-                                                            <span className="text-xs text-emerald-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> กำลังบันทึก...
-                                                            </span>
-                                                        )}
-                                                        {status === "error" && (
-                                                            <span className="text-xs text-red-500 font-bold">
-                                                                เกิดข้อผิดพลาด
-                                                            </span>
-                                                        )}
-                                                        {status === "idle" && (
-                                                            <span className="text-xs text-slate-400 font-medium">
-                                                                รอการวิเคราะห์...
-                                                            </span>
-                                                        )}
-                                                        {status === "done" && (
-                                                            <span className={`text-lg font-black ${scoreColor}`}>
-                                                                {Math.round(score)} <span className="text-xs font-semibold">PTS</span>
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Action Panel for individual candidate */}
-                                                <div className="flex items-center gap-2 pt-1">
-                                                    {app.resume_url && (
-                                                        <a
-                                                            href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
-                                                        >
-                                                            เปิดไฟล์ Resume
-                                                        </a>
-                                                    )}
-                                                    <button
-                                                        onClick={() => runSingleAnalysis(app)}
-                                                        disabled={status === "ocr" || status === "ai" || status === "saving"}
-                                                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
-                                                    >
-                                                        <RefreshCw className={`w-3 h-3 ${status === "ocr" || status === "ai" ? "animate-spin" : ""}`} /> วิเคราะห์ใหม่
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteApplicant(app.ID)}
-                                                        className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ml-auto cursor-pointer"
-                                                        title="ลบข้อมูลผู้สมัคร"
-                                                    >
-                                                        <X className="w-3 h-3" /> ลบผู้สมัคร
-                                                    </button>
-                                                </div>
-
-                                                {status === "idle" || status === "ocr" || status === "error" ? (
-                                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center text-slate-400 text-xs font-sans mt-2">
-                                                        {status === "ocr" && "⏳ กำลังสแกนไฟล์ด้วย OCR..."}
-                                                        {status === "error" && "⚠️ เกิดข้อผิดพลาดในการประเมินผลลัพธ์"}
-                                                        {status === "idle" && "⏳ รอการวิเคราะห์ (กำลังจัดเตรียมคิวประมวลผล...)"}
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {/* Streaming indicator while AI is running */}
-                                                        {(status === "ai" || status === "saving") && (
-                                                            <div className="flex items-center gap-2 mb-3 text-xs text-[#4169E1] font-bold animate-pulse font-sans bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 
-                                                                <span>{status === "ai" ? "🧠 AI กำลังสตรีมวิเคราะห์และให้คะแนน..." : "💾 กำลังบันทึกผลลัพธ์..."}</span>
+                                            // Parse criteria
+                                            const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
+                                            const criteriaMap = parseCriteria(matchedJob?.criteria || "");
+                                            const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
+                                            
+                                            return (
+                                                <div key={app.ID || idx} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col font-sans">
+                                                    {/* ─── Main Compact Row Header (หน้าหลัก) ─── */}
+                                                    <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                        
+                                                        {/* 1. Rank & Candidate Info */}
+                                                        <div className="flex items-center gap-3 min-w-[220px]">
+                                                            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#4169E1] font-mono font-black text-xs flex items-center justify-center shrink-0">
+                                                                #{idx + 1}
                                                             </div>
-                                                        )}
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <h4 className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={candidateName}>
+                                                                        {candidateName}
+                                                                    </h4>
+                                                                    {app.resume_url && (
+                                                                        <a
+                                                                            href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0"
+                                                                        >
+                                                                            Resume
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-slate-400 truncate mt-0.5" title={candidateName}>
+                                                                    {app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}
+                                                                </p>
+                                                            </div>
+                                                        </div>
 
-                                                        {/* Criteria progress bars */}
-                                                        <div className="space-y-3 pt-3 border-t border-slate-50">
-                                                            {Object.entries(breakdown).map(([cName, info]: any, cIdx) => {
+                                                        {/* 2. Criteria Breakdown Badges (แสดงแค่ Criteria และคะแนนเกณฑ์) */}
+                                                        <div className="flex-1 overflow-x-auto flex items-center gap-2 py-1">
+                                                            {status === "done" && Object.entries(breakdown).map(([cName, info]: any, cIdx) => {
                                                                 const percent = info.max > 0 ? (info.score / info.max) * 100 : 0;
-                                                                const colorClass = percent >= 80 
-                                                                    ? "emerald" 
+                                                                const badgeColor = percent >= 80 
+                                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
                                                                     : percent >= 50 
-                                                                        ? "amber" 
-                                                                        : "rose";
+                                                                        ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                                                        : "bg-rose-50 text-rose-700 border-rose-200";
 
-                                                                const barStyles = {
-                                                                    emerald: {
-                                                                        bar: "bg-emerald-500",
-                                                                        border: "border-emerald-500/30",
-                                                                        bg: "bg-emerald-50/20"
-                                                                    },
-                                                                    amber: {
-                                                                        bar: "bg-amber-500",
-                                                                        border: "border-amber-500/30",
-                                                                        bg: "bg-amber-50/20"
-                                                                    },
-                                                                    rose: {
-                                                                        bar: "bg-rose-500",
-                                                                        border: "border-rose-500/30",
-                                                                        bg: "bg-rose-50/20"
-                                                                    }
-                                                                }[colorClass];
-                                                                
                                                                 return (
-                                                                    <div key={cIdx} className="space-y-1">
-                                                                        <div className="flex justify-between text-[11px] font-bold text-slate-600">
-                                                                            <span>{cIdx + 1}. {cName}</span>
-                                                                            <span>{info.score}/{info.max} PTS</span>
-                                                                        </div>
-                                                                        <div className={`w-full ${barStyles.bg} border ${barStyles.border} h-3.5 rounded-full overflow-hidden p-0.5`}>
-                                                                            <div 
-                                                                                className={`h-full rounded-full transition-all duration-500 ${barStyles.bar}`}
-                                                                                style={{ width: `${percent}%` }}
-                                                                            ></div>
-                                                                        </div>
+                                                                    <div key={cIdx} className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap flex items-center gap-1.5 ${badgeColor}`}>
+                                                                        <span className="text-slate-500 font-normal truncate max-w-[130px]">{cName}:</span>
+                                                                        <span className="font-bold font-mono">{info.score}/{info.max}</span>
                                                                     </div>
                                                                 );
                                                             })}
+                                                            {status === "ai" && (
+                                                                <span className="text-xs text-blue-500 font-bold flex items-center gap-1.5 animate-pulse">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> AI กำลังวิเคราะห์...
+                                                                </span>
+                                                            )}
+                                                            {status === "ocr" && (
+                                                                <span className="text-xs text-amber-500 font-bold flex items-center gap-1.5">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> OCR สแกนไฟล์...
+                                                                </span>
+                                                            )}
+                                                            {status === "idle" && (
+                                                                <span className="text-xs text-slate-400 font-medium">
+                                                                    รอคัดกรองคะแนน...
+                                                                </span>
+                                                            )}
                                                         </div>
 
-                                                        {/* Summary Total Bar */}
-                                                        {(() => {
-                                                            const entries = Object.values(breakdown) as { score: number; max: number }[];
-                                                            const totalScore = entries.reduce((s, e) => s + e.score, 0);
-                                                            const totalMax = entries.reduce((s, e) => s + e.max, 0);
-                                                            const avgPercent = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
-                                                            const avgColor = avgPercent >= 80 ? "emerald" : avgPercent >= 50 ? "amber" : "rose";
-                                                            const avgBarStyles = {
-                                                                emerald: { bar: "from-emerald-400 to-emerald-600", text: "text-emerald-600" },
-                                                                amber: { bar: "from-amber-400 to-amber-500", text: "text-amber-600" },
-                                                                rose: { bar: "from-rose-400 to-rose-600", text: "text-rose-600" },
-                                                            }[avgColor];
-                                                            return (
-                                                                <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
-                                                                    <div className="flex justify-between text-[12px] font-black text-slate-700">
-                                                                        <span>คะแนนรวม</span>
-                                                                        <span className={avgBarStyles.text}>{totalScore}/{totalMax} PTS ({Math.round(avgPercent)}%)</span>
-                                                                    </div>
-                                                                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
-                                                                        <div 
-                                                                            className={`h-full rounded-full bg-gradient-to-r ${avgBarStyles.bar} transition-all duration-700`}
-                                                                            style={{ width: `${avgPercent}%` }}
-                                                                        ></div>
+                                                        {/* 3. PTS Score & Action Buttons (ปุ่มวิเคราะห์เดี่ยว + PTS) */}
+                                                        <div className="flex items-center gap-3 shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-2 md:pt-0 border-slate-100">
+                                                            {/* PTS Score Badge (ขยายขนาด PTS ให้ใหญ่ขึ้นเด่นชัด) */}
+                                                            <div className={`px-4 py-2 rounded-2xl border-2 text-center font-mono font-black flex items-center gap-1.5 shadow-sm transition-all ${scoreColor}`}>
+                                                                <span className="text-xl font-extrabold leading-none">{Math.round(score)}</span>
+                                                                <span className="text-xs font-black tracking-wider uppercase opacity-90">PTS</span>
+                                                            </div>
+
+                                                            {/* Action Buttons */}
+                                                            <div className="flex items-center gap-2">
+                                                                {/* ปุ่มวิเคราะห์เดี่ยว */}
+                                                                <button
+                                                                    onClick={() => runSingleAnalysis(app)}
+                                                                    disabled={status === "ocr" || status === "ai" || status === "saving"}
+                                                                    className="flex items-center gap-1.5 bg-[#4169E1] hover:bg-[#3152c4] text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                                                                    title="วิเคราะห์ผู้สมัครรายนี้คนเดียว"
+                                                                >
+                                                                    <Sparkles className={`w-3.5 h-3.5 ${status === "ocr" || status === "ai" ? "animate-spin" : ""}`} />
+                                                                    <span>วิเคราะห์เดี่ยว</span>
+                                                                </button>
+
+                                                                {/* ปุ่มลบผู้สมัคร */}
+                                                                <button
+                                                                    onClick={() => handleDeleteApplicant(app.ID)}
+                                                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                                                    title="ลบผู้สมัคร"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* ─── 4. Expandable Details Section (ส่วนขยาย: รายละเอียดวิเคราะห์เดี่ยว & ข้อความดิบ) ─── */}
+                                                    <details className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer">
+                                                        <summary className="font-bold text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
+                                                                ดูรายละเอียดผลวิเคราะห์และข้อความ OCR ฉบับเต็ม
+                                                            </span>
+                                                            <span className="text-[10px] font-semibold text-slate-400">คลิกเพื่อขยาย/ซ่อน</span>
+                                                        </summary>
+
+                                                        <div className="p-4 border-t border-slate-200/60 bg-white space-y-4 rounded-b-2xl">
+                                                            {/* AI Detailed Analysis Report */}
+                                                            {app.AIScreening?.strengths ? (
+                                                                <div className="space-y-2">
+                                                                    <h5 className="font-extrabold text-[#4169E1] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                                                        <Sparkles className="w-3.5 h-3.5" /> รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
+                                                                    </h5>
+                                                                    <div className="bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap">
+                                                                        {getCleanStrengths(app.AIScreening.strengths)}
                                                                     </div>
                                                                 </div>
-                                                            );
-                                                        })()}
+                                                            ) : (
+                                                                <div className="text-slate-400 text-xs italic">
+                                                                    ยังไม่มีผลการวิเคราะห์เดี่ยวจาก AI (กดปุ่ม "วิเคราะห์เดี่ยว" ด้านบนเพื่อประมวลผล)
+                                                                </div>
+                                                            )}
 
-                                                        {/* Text OCR raw display collapsible */}
-                                                        <div className="pt-1">
-                                                            <details className="text-[11px] border border-slate-100 rounded-xl p-2 bg-slate-50/50 cursor-pointer">
-                                                                <summary className="font-bold text-slate-500 select-none">ดูข้อความดิบจากการสแกน (OCR Raw Text)</summary>
+                                                            {/* Raw Text OCR display */}
+                                                            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                                                                <h5 className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
+                                                                    📄 ข้อความดิบจากการสแกนเอกสาร (OCR Raw Text)
+                                                                </h5>
                                                                 <textarea
                                                                     readOnly
                                                                     value={(() => {
                                                                         const txt = app.ResumeText || app.resume_text || "";
                                                                         if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
-                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์ใหม่' หรือ 'วิเคราะห์ผู้สมัครทั้งหมด' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
+                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
                                                                         }
                                                                         return txt;
                                                                     })()}
                                                                     rows={4}
-                                                                    className="w-full bg-white border border-slate-100 rounded-lg p-2 mt-2 font-mono text-[9px] resize-none outline-none leading-normal text-slate-600"
+                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-[10px] resize-none outline-none leading-normal text-slate-600"
                                                                 />
-                                                            </details>
+                                                            </div>
                                                         </div>
-
-                                                        {/* ─── AI Detailed Analysis Panel ─── */}
-                                                        {app.AIScreening?.strengths && (() => {
-                                                            const rawStr = app.AIScreening.strengths as string;
-                                                            const cleanText = getCleanStrengths(rawStr);
-
-                                                            return (
-                                                                <details className="group text-[11px] border border-indigo-100 rounded-xl bg-indigo-50/20 cursor-pointer overflow-hidden font-sans">
-                                                                    <summary className="font-bold text-indigo-600 select-none px-3 py-2.5 flex items-center gap-1.5 list-none hover:bg-indigo-50/40 transition-all">
-                                                                        <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                                                                        รายละเอียดผลการวิเคราะห์อย่างละเอียด (AI Detailed Analysis)
-                                                                    </summary>
-
-                                                                    <div className="px-4 pb-4 pt-2 border-t border-indigo-100 bg-white">
-                                                                        <pre className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                                                                            {cleanText}
-                                                                        </pre>
-                                                                        {app.AIScreening.model_used && (
-                                                                            <p className="text-[9px] text-slate-400 pt-2 mt-2 border-t border-slate-100">
-                                                                                🔧 Model: <span className="font-mono font-bold">{app.AIScreening.model_used}</span>
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                </details>
-                                                            );
-                                                        })()}
-                                                    </>
-                                                )}
-                                            </div>
-                                        );
+                                                    </details>
+                                                </div>
+                                            );
                                     })}
                                 </div>
                             )}
