@@ -35,6 +35,7 @@ func ConnectDatabase() {
 		&entity.Candidate{},
 		&entity.User{},
 		&entity.Application{},
+		&entity.ApplicationDocument{},
 		&entity.Resumes{},
 		&entity.KnowledgeBase{},
 		&entity.Interview{},

@@ -7,6 +7,7 @@ import {
     FolderOpen,
     FileSearch,
     BookOpen,
+    Upload,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -34,6 +35,12 @@ export const hrMenuItems: MenuItem[] = [
         label: "คลังความรู้ (นโยบาย)",
         icon: BookOpen,
         path: "/hr/knowledge",
+    },
+    {
+        id: "documents",
+        label: "เอกสารสัมภาษณ์และคัดเลือก",
+        icon: Upload,
+        path: "/hr/upload-documents",
     },
     {
         id: "positions",

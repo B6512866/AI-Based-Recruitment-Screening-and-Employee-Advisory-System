@@ -352,6 +352,45 @@ export async function checkApplicationStatus(
     return res.data;
 }
 
+export async function getJobPositionDocuments(
+    jobId: number
+) {
+    const res = await apiClient.get(`/job-positions/${jobId}/documents`);
+    return res.data;
+}
+
+export async function uploadApplicationDocument(
+    jobPositionId: number,
+    files: File[],
+    documentType: string,
+    title: string,
+    description: string = ""
+) {
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    formData.append("job_position_id", String(jobPositionId));
+    formData.append("document_type", documentType);
+    formData.append("title", title);
+    formData.append("description", description);
+
+    const res = await apiClient.post(
+        "/job-positions/documents/upload",
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        }
+    );
+
+    return res.data;
+}
+
+export async function deleteApplicationDocument(docId: number) {
+    const res = await apiClient.delete(`/job-positions/documents/${docId}`);
+    return res.data;
+}
+
 /* =========================================================
    AI EXTRACT JOB INFO FROM IMAGE
 ========================================================= */

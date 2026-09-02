@@ -567,36 +567,6 @@ function LandingPage() {
                                 </p>
                             </div>
 
-                            {/* Section: คุณสมบัติ */}
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
-                                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-50 pb-2">
-                                    <ShieldCheck className="w-4.5 h-4.5 text-[#4169E1]" />
-                                    คุณสมบัติผู้สมัคร / เกณฑ์คัดเลือก
-                                </h4>
-                                {Array.isArray(activeDetailJob.criteria) ? (
-                                    <div className="space-y-4">
-                                        {activeDetailJob.criteria.map((c: any, idx: number) => (
-                                            <div key={c.ID || idx} className="space-y-1.5 text-slate-700">
-                                                <h5 className="font-bold text-slate-800 text-xs">
-                                                    {c.title} (ค่าน้ำหนัก {c.weight}%)
-                                                </h5>
-                                                <ul className="list-disc pl-5 text-slate-500 text-xs space-y-1">
-                                                    {c.sub_criteria?.map((sc: any, sidx: number) => (
-                                                        <li key={sc.ID || sidx}>
-                                                            <span className="font-semibold text-slate-700">{sc.title}:</span> {sc.description} ({sc.weight}%)
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                        {activeDetailJob.criteria || "ไม่มีรายละเอียดคุณสมบัติ"}
-                                    </p>
-                                )}
-                            </div>
-
                             {/* Section: สวัสดิการ */}
                             {activeDetailJob.benefits && (
                                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">

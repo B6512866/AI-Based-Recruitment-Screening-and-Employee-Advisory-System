@@ -8,6 +8,7 @@ import InterviewsPage from "../page/hr/InterviewsPage";
 import CasesPage from "../page/hr/CasesPage";
 import ScreeningPage from "../page/hr/ScreeningPage";
 import KnowledgePage from "../page/hr/KnowledgePage";
+import UploadDocumentsPage from "../page/hr/UploadDocumentsPage";
 
 export function HRRoutes() {
     return (
@@ -18,6 +19,7 @@ export function HRRoutes() {
                     <Route path="dashboard" element={<HRDashboard />} />
                     <Route path="screening" element={<ScreeningPage />} />
                     <Route path="knowledge" element={<KnowledgePage />} />
+                    <Route path="upload-documents" element={<UploadDocumentsPage />} />
                     <Route path="positions" element={<PositionsPage />} />
                     <Route path="candidates" element={<CandidatesPage />} />
                     <Route path="interviews" element={<InterviewsPage />} />

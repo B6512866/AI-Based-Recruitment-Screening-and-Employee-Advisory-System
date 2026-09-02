@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -541,6 +544,133 @@ func (c *JobPositionController) GetApplications(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"data": apps})
+}
+
+func (c *JobPositionController) GetJobPositionDocuments(ctx *gin.Context) {
+	idStr := ctx.Param("id")
+	jobID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตำแหน่งงานไม่ถูกต้อง"})
+		return
+	}
+
+	var docs []entity.ApplicationDocument
+	if err := c.db.Where("job_position_id = ?", uint(jobID)).Order("created_at desc").Find(&docs).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงเอกสารได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"data": docs})
+}
+
+func (c *JobPositionController) UploadDocument(ctx *gin.Context) {
+	jobPositionIDStr := ctx.PostForm("job_position_id")
+	if jobPositionIDStr == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเลือกตำแหน่งงานก่อนอัปโหลดเอกสาร"})
+		return
+	}
+
+	jobPositionID, err := strconv.ParseUint(jobPositionIDStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ตำแหน่งงานไม่ถูกต้อง"})
+		return
+	}
+
+	if err := os.MkdirAll("./upload/documents", os.ModePerm); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโฟลเดอร์สำหรับเอกสารได้"})
+		return
+	}
+
+	var uploaded []entity.ApplicationDocument
+	form, err := ctx.MultipartForm()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเลือกไฟล์ที่ต้องการอัปโหลด"})
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		files = form.File["file"]
+	}
+
+	if len(files) == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเลือกไฟล์ที่ต้องการอัปโหลด"})
+		return
+	}
+
+	documentType := strings.TrimSpace(ctx.PostForm("document_type"))
+	if documentType == "" {
+		documentType = "other"
+	}
+	description := strings.TrimSpace(ctx.PostForm("description"))
+
+	var userID *uint
+	if val, exists := ctx.Get("userID"); exists {
+		if uid, ok := val.(uint); ok {
+			userID = &uid
+		}
+	}
+
+	for _, fileHeader := range files {
+		filePath := filepath.Join("./upload/documents", fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fileHeader.Filename)))
+		if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
+			return
+		}
+
+		title := strings.TrimSpace(ctx.PostForm("title"))
+		if title == "" {
+			title = fileHeader.Filename
+		}
+
+		doc := entity.ApplicationDocument{
+			JobPositionID:    uint(jobPositionID),
+			DocumentType:     documentType,
+			Title:            title,
+			FileName:         fileHeader.Filename,
+			FileURL:          fmt.Sprintf("/api/upload/documents/%s", filepath.Base(filePath)),
+			Description:      description,
+			UploadedByUserID: userID,
+		}
+		if err := c.db.Create(&doc).Error; err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลเอกสารได้"})
+			return
+		}
+		uploaded = append(uploaded, doc)
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "อัปโหลดเอกสารสำเร็จ",
+		"data":    uploaded,
+	})
+}
+
+func (c *JobPositionController) DeleteDocument(ctx *gin.Context) {
+	docID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID เอกสารไม่ถูกต้อง"})
+		return
+	}
+
+	var doc entity.ApplicationDocument
+	if err := c.db.First(&doc, uint(docID)).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเอกสารนี้"})
+		return
+	}
+
+	if doc.FileURL != "" {
+		fileName := strings.TrimPrefix(doc.FileURL, "/api/upload/documents/")
+		if fileName != "" {
+			_ = os.Remove(filepath.Join("./upload/documents", fileName))
+		}
+	}
+
+	if err := c.db.Delete(&doc).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบเอกสารได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ลบเอกสารสำเร็จ"})
 }
 
 // ── บันทึก/อัปเดตผลคัดกรอง AI สำหรับใบสมัครรายคน
