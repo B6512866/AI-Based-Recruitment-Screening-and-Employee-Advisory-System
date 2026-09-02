@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -107,8 +108,20 @@ func (c *InterviewController) Create(ctx *gin.Context) {
 	// โหลดข้อมูลที่สัมพันธ์กลับมาเพื่อส่งกลับ
 	c.db.Preload("Application.Candidate").Preload("Application.JobPosition").Preload("CreatedBy").First(&interview, interview.ID)
 
+	// ส่งอีเมลแจ้งเตือนนัดสัมภาษณ์ไปยัง Gmail ของผู้สมัคร
+	if interview.Application.Candidate.Email != "" {
+		candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
+		jobTitle := interview.Application.JobPosition.Title
+		dateStr := interview.InterviewDatetime.Format("02/01/2006 เวลา 15:04 น.")
+		locStr := interview.Format
+		if interview.FormatDescription != "" {
+			locStr += " (" + interview.FormatDescription + ")"
+		}
+		go services.SendInterviewEmail(interview.Application.Candidate.Email, candName, jobTitle, dateStr, locStr, interview.FormatDescription)
+	}
+
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "สร้างนัดสัมภาษณ์สำเร็จ",
+		"message": "สร้างนัดสัมภาษณ์สำเร็จและส่งอีเมลแจ้งเตือนแล้ว",
 		"data":    interview,
 	})
 }
