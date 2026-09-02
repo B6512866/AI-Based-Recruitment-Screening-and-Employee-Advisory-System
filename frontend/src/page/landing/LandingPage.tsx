@@ -62,105 +62,93 @@ function LandingPage() {
     const [applyTranscriptUrl, setApplyTranscriptUrl] = useState("");
     const [applyTranscriptFileName, setApplyTranscriptFileName] = useState("");
     const [applyTranscriptText, setApplyTranscriptText] = useState("");
+    const [resumeFile, setResumeFile] = useState<File | null>(null);
+    const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
     const [submittingApply, setSubmittingApply] = useState(false);
     const [applyError, setApplyError] = useState("");
 
-    // ฟังก์ชันอัปโหลดไฟล์ Resume ไปที่ Go Backend
-    const handleResumeUpload = async (file: File) => {
+    // ฟังก์ชันเลือกไฟล์ Resume (เก็บไว้ใน State ยังไม่อัปโหลดไปที่ Server)
+    const handleResumeSelect = (file: File) => {
         if (!file) return;
-        setApplyFileName(file.name + " (กำลังอัปโหลด...)");
+        setResumeFile(file);
+        setApplyFileName(file.name);
         setApplyError("");
-        setApplyResumeText("");
-        setApplyResumeUrl("");
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            
-            // อัปโหลดไฟล์ไปที่ Go Backend
-            const res = await apiClient.post("/upload", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data"
-                }
-            });
-            
-            if (res.data && res.data.url) {
-                setApplyResumeUrl(res.data.url);
-                setApplyFileName(file.name + " (อัปโหลดสำเร็จ)");
-                
-                // สำหรับไฟล์ข้อความดึงมาใส่ Text ด้วยเพื่อรักษา Compatibility
-                if (file.name.toLowerCase().endsWith(".txt")) {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        setApplyResumeText(e.target?.result as string || "");
-                    };
-                    reader.readAsText(file, "utf-8");
-                } else {
-                    // หากเป็น PDF/รูปภาพ เก็บเป็นลิงก์และใส่ข้อมูลจำลองไว้เพื่อไม่ให้เช็คข้อความว่างผ่านยาก
-                    setApplyResumeText(`ข้อมูลประวัติย่อแบบเอกสาร/รูปภาพ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
-                }
-            } else {
-                throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
-            }
-        } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
-            setApplyFileName("");
-            setApplyResumeUrl("");
-        }
     };
 
-    // ฟังก์ชันอัปโหลดไฟล์ Transcript ไปที่ Go Backend
-    const handleTranscriptUpload = async (file: File) => {
+    // ฟังก์ชันเลือกไฟล์ Transcript (เก็บไว้ใน State ยังไม่อัปโหลดไปที่ Server)
+    const handleTranscriptSelect = (file: File) => {
         if (!file) return;
-        setApplyTranscriptFileName(file.name + " (กำลังอัปโหลด...)");
+        setTranscriptFile(file);
+        setApplyTranscriptFileName(file.name);
         setApplyError("");
-        setApplyTranscriptText("");
-        setApplyTranscriptUrl("");
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            
-            // อัปโหลดไฟล์ไปที่ Go Backend
-            const res = await apiClient.post("/upload", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data"
-                }
-            });
-            
-            if (res.data && res.data.url) {
-                setApplyTranscriptUrl(res.data.url);
-                setApplyTranscriptFileName(file.name + " (อัปโหลดสำเร็จ)");
-                
-                if (file.name.toLowerCase().endsWith(".txt")) {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        setApplyTranscriptText(e.target?.result as string || "");
-                    };
-                    reader.readAsText(file, "utf-8");
-                } else {
-                    setApplyTranscriptText(`ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
-                }
-            } else {
-                throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
-            }
-        } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์ Transcript");
-            setApplyTranscriptFileName("");
-            setApplyTranscriptUrl("");
-        }
     };
 
-    // ฟังก์ชันยิง API ส่งข้อมูลใบสมัครไปบันทึกที่หลังบ้าน
+    // ฟังก์ชันยิง API อัปโหลดไฟล์และส่งข้อมูลใบสมัครไปบันทึกที่หลังบ้านเมื่อกดปุ่ม "ส่งใบสมัครเลย"
     const handleApplySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim() || !applyResumeText.trim() || !applyTranscriptUrl.trim()) {
-            setApplyError("กรุณากรอกข้อมูลให้ครบถ้วน อัปโหลดไฟล์ Resume และไฟล์ Transcript");
+        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim()) {
+            setApplyError("กรุณากรอกข้อมูลส่วนตัวให้ครบถ้วน");
             return;
         }
+        if (!resumeFile && !applyResumeUrl) {
+            setApplyError("กรุณาเลือกไฟล์ Resume ก่อนส่งใบสมัคร");
+            return;
+        }
+        if (!transcriptFile && !applyTranscriptUrl) {
+            setApplyError("กรุณาเลือกไฟล์ Transcript / ใบแสดงผลการศึกษาก่อนส่งใบสมัคร");
+            return;
+        }
+
         setSubmittingApply(true);
         setApplyError("");
+
         try {
+            let finalResumeUrl = applyResumeUrl;
+            let finalResumeText = applyResumeText;
+
+            // อัปโหลดไฟล์ Resume เมื่อกดปุ่มส่งใบสมัครเท่านั้น
+            if (resumeFile) {
+                const formData = new FormData();
+                formData.append("file", resumeFile);
+                const res = await apiClient.post("/upload", formData, {
+                    headers: { "Content-Type": "multipart/form-data" }
+                });
+
+                if (res.data && res.data.url) {
+                    finalResumeUrl = res.data.url;
+                    if (resumeFile.name.toLowerCase().endsWith(".txt")) {
+                        finalResumeText = await resumeFile.text();
+                    } else {
+                        finalResumeText = `ข้อมูลประวัติย่อแบบเอกสาร/รูปภาพ ถูกบันทึกไว้ในระบบ: ${res.data.url}`;
+                    }
+                } else {
+                    throw new Error("ไม่สามารถอัปโหลดไฟล์ Resume ได้");
+                }
+            }
+
+            let finalTranscriptUrl = applyTranscriptUrl;
+            let finalTranscriptText = applyTranscriptText;
+
+            // อัปโหลดไฟล์ Transcript เมื่อกดปุ่มส่งใบสมัครเท่านั้น
+            if (transcriptFile) {
+                const formData = new FormData();
+                formData.append("file", transcriptFile);
+                const res = await apiClient.post("/upload", formData, {
+                    headers: { "Content-Type": "multipart/form-data" }
+                });
+
+                if (res.data && res.data.url) {
+                    finalTranscriptUrl = res.data.url;
+                    if (transcriptFile.name.toLowerCase().endsWith(".txt")) {
+                        finalTranscriptText = await transcriptFile.text();
+                    } else {
+                        finalTranscriptText = `ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`;
+                    }
+                } else {
+                    throw new Error("ไม่สามารถอัปโหลดไฟล์ Transcript ได้");
+                }
+            }
+
             if (selectedJob) {
                 const response = await applyjob(
                     selectedJob.ID,
@@ -168,12 +156,12 @@ function LandingPage() {
                     applyLastName,
                     applyEmail,
                     applyPhone,
-                    applyResumeText,
-                    applyResumeUrl,
-                    applyTranscriptUrl,
-                    applyTranscriptText
+                    finalResumeText,
+                    finalResumeUrl,
+                    finalTranscriptUrl,
+                    finalTranscriptText
                 );
-                
+
                 if (response && response.application_code) {
                     setCreatedApplicationCode(response.application_code);
                 } else if (response && response.application_id) {
@@ -181,20 +169,23 @@ function LandingPage() {
                 }
 
                 setShowApplySuccess(true);
-                setShowApplyForm(false); // ปิดฟอร์มสมัครงาน
+                setShowApplyForm(false);
                 // เคลียร์ค่าในฟอร์มเมื่อส่งสำเร็จ
                 setApplyFirstName("");
                 setApplyLastName("");
                 setApplyEmail("");
                 setApplyPhone("");
                 setApplyResumeText("");
+                setApplyResumeUrl("");
                 setApplyFileName("");
                 setApplyTranscriptUrl("");
                 setApplyTranscriptFileName("");
                 setApplyTranscriptText("");
+                setResumeFile(null);
+                setTranscriptFile(null);
             }
         } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
+            setApplyError(err.response?.data?.error || err.message || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
         } finally {
             setSubmittingApply(false);
         }
@@ -742,7 +733,7 @@ function LandingPage() {
                                         required
                                         id="resume-uploader"
                                         className="hidden"
-                                        onChange={e => e.target.files?.[0] && handleResumeUpload(e.target.files[0])}
+                                        onChange={e => e.target.files?.[0] && handleResumeSelect(e.target.files[0])}
                                     />
                                     <label htmlFor="resume-uploader" className="cursor-pointer block space-y-2">
                                         <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
@@ -751,7 +742,7 @@ function LandingPage() {
                                         {applyFileName ? (
                                             <div>
                                                 <p className="text-xs font-bold text-[#4169E1]">{applyFileName}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                                <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ เลือกไฟล์สำเร็จ (พร้อมส่งเมื่อกดปุ่มส่งใบสมัคร)</p>
                                             </div>
                                         ) : (
                                             <div>
@@ -773,7 +764,7 @@ function LandingPage() {
                                         required
                                         id="transcript-uploader"
                                         className="hidden"
-                                        onChange={e => e.target.files?.[0] && handleTranscriptUpload(e.target.files[0])}
+                                        onChange={e => e.target.files?.[0] && handleTranscriptSelect(e.target.files[0])}
                                     />
                                     <label htmlFor="transcript-uploader" className="cursor-pointer block space-y-2">
                                         <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
@@ -782,7 +773,7 @@ function LandingPage() {
                                         {applyTranscriptFileName ? (
                                             <div>
                                                 <p className="text-xs font-bold text-[#4169E1]">{applyTranscriptFileName}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                                <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ เลือกไฟล์สำเร็จ (พร้อมส่งเมื่อกดปุ่มส่งใบสมัคร)</p>
                                             </div>
                                         ) : (
                                             <div>

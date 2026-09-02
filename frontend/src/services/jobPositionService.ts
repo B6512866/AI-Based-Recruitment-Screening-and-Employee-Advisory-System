@@ -299,25 +299,20 @@ export async function updateApplicationScreening(
     appId: number,
     score: number,
     strengths: string,
-    modelUsed: string =
-        "typhoon2.5-qwen3-4b",
-    resumeText: string = ""
+    modelUsed: string = "typhoon2.5-qwen3-4b",
+    resumeText: string = "",
+    analysisData: string = ""
 ) {
-    const res =
-        await apiClient.put(
-            `/applications/${appId}/screening`,
-            {
-                score,
-
-                strengths,
-
-                model_used:
-                    modelUsed,
-
-                resume_text:
-                    resumeText,
-            }
-        );
+    const res = await apiClient.put(
+        `/applications/${appId}/screening`,
+        {
+            score,
+            strengths,
+            analysis_data: analysisData,
+            model_used: modelUsed,
+            resume_text: resumeText,
+        }
+    );
 
     return res.data;
 }

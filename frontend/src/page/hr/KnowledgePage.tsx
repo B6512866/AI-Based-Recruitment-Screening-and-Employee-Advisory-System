@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { BookOpen, Upload, Plus, Edit3, Save, Trash2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
-import { getallknowledge, getbyidknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
+import { getallknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
+
+const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
 
 interface Document {
     ID: number;
@@ -105,19 +107,76 @@ export default function KnowledgePage() {
         }
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // State สำหรับ AI PDF Extraction
+    const [analyzingPdf, setAnalyzingPdf] = useState(false);
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = evt => {
-            const content = evt.target?.result as string || "";
+        const isPdfOrImage = file.name.toLowerCase().endsWith(".pdf") ||
+            file.type.includes("pdf") ||
+            file.type.includes("image");
+
+        if (!isPdfOrImage && file.name.toLowerCase().endsWith(".txt")) {
+            const reader = new FileReader();
+            reader.onload = evt => {
+                const content = evt.target?.result as string || "";
+                setIsCreating(true);
+                setSelectedDoc(null);
+                setEditFilename(file.name);
+                setEditContent(content);
+                setMessage({ text: "โหลดไฟล์ข้อความสำเร็จ ตรวจสอบเนื้อหาและกดบันทึกเข้า DB", type: "success" });
+            };
+            reader.readAsText(file, "utf-8");
+            return;
+        }
+
+        // สำหรับไฟล์ PDF หรือ รูปภาพ -> เรียกใช้ Typhoon AI OCR สกัดข้อความ
+        setAnalyzingPdf(true);
+        setMessage({ text: "🤖 AI (Typhoon OCR) กำลังอ่านและสกัดข้อความจากเอกสาร PDF...", type: "success" });
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const res = await fetch(`${TYPHOON_API}/ocr`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) {
+                throw new Error(`ไม่สามารถอ่านไฟล์ได้ (HTTP ${res.status})`);
+            }
+
+            const data = await res.json();
+            const extractedText = data.text || "";
+
+            if (!extractedText.trim()) {
+                throw new Error("AI ไม่พบข้อความในเอกสาร PDF นี้");
+            }
+
+            // บันทึกข้อความที่ AI สกัดได้เข้า Form และเตรียมพร้อมกดบันทึกใน DB
             setIsCreating(true);
             setSelectedDoc(null);
-            setEditFilename(file.name);
-            setEditContent(content);
-        };
-        reader.readAsText(file, "utf-8");
+            const cleanName = file.name.replace(/\.[^/.]+$/, "") + ".txt";
+            setEditFilename(cleanName);
+            setEditContent(extractedText);
+            setMessage({
+                text: `✨ AI สกัดข้อความจาก PDF (${file.name}) สำเร็จแล้ว! ตรวจสอบเนื้อหาและกดบันทึกเข้า DB ได้เลย`,
+                type: "success"
+            });
+        } catch (err: any) {
+            setMessage({
+                text: err.message || "เกิดข้อผิดพลาดในการอ่านไฟล์ PDF ด้วย AI",
+                type: "error"
+            });
+        } finally {
+            setAnalyzingPdf(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        }
     };
 
     const startNewDoc = () => {
@@ -138,15 +197,25 @@ export default function KnowledgePage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 transition-all shadow-sm text-sm"
+                        disabled={analyzingPdf}
+                        className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 transition-all shadow-sm text-sm disabled:opacity-50"
                     >
-                        <Upload className="w-4 h-4 text-[#4169E1]" />
-                        อัปโหลดไฟล์ .txt
+                        {analyzingPdf ? (
+                            <span className="flex items-center gap-2 text-[#4169E1]">
+                                <div className="w-4 h-4 border-2 border-[#4169E1] border-t-transparent rounded-full animate-spin" />
+                                AI กำลังสกัด PDF...
+                            </span>
+                        ) : (
+                            <>
+                                <Upload className="w-4 h-4 text-[#4169E1]" />
+                                อัปโหลดไฟล์ (PDF / TXT) ด้วย AI
+                            </>
+                        )}
                     </button>
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".txt"
+                        accept=".pdf,.txt,image/*"
                         className="hidden"
                         onChange={handleFileUpload}
                     />

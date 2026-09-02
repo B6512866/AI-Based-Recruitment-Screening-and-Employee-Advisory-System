@@ -683,10 +683,11 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	}
 
 	var req struct {
-		Score      float64 `json:"score"`
-		Strengths  string  `json:"strengths"`
-		ModelUsed  string  `json:"model_used"`
-		ResumeText string  `json:"resume_text"`
+		Score        float64 `json:"score"`
+		Strengths    string  `json:"strengths"`
+		AnalysisData string  `json:"analysis_data"`
+		ModelUsed    string  `json:"model_used"`
+		ResumeText   string  `json:"resume_text"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
@@ -709,6 +710,9 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 		if err := c.db.First(&scr, *app.ScreeningID).Error; err == nil {
 			scr.SkillScore = req.Score
 			scr.Strengths = req.Strengths
+			if req.AnalysisData != "" {
+				scr.AnalysisData = req.AnalysisData
+			}
 			scr.ModelUsed = req.ModelUsed
 			if err := c.db.Save(&scr).Error; err != nil {
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลประเมิน AI ได้"})
@@ -724,9 +728,10 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 
 	// 2. ถ้ายังไม่มี ให้สร้าง AIScreening ใหม่และบันทึกเชื่อมโยง
 	scr := entity.AIScreening{
-		SkillScore: req.Score,
-		Strengths:  req.Strengths,
-		ModelUsed:  req.ModelUsed,
+		SkillScore:   req.Score,
+		Strengths:    req.Strengths,
+		AnalysisData: req.AnalysisData,
+		ModelUsed:    req.ModelUsed,
 	}
 	if err := c.db.Create(&scr).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลการประเมิน AI ได้"})

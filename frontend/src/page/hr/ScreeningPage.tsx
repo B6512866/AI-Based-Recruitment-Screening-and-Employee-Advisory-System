@@ -6,12 +6,12 @@ import apiClient from "../../services/apiClient";
 
 const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
 
-const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR วิเคราะห์ Resume ภาษาไทย กรุณาวิเคราะห์อย่างกระชับและรวดเร็ว:
+const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR Recruiter วิเคราะห์และประเมิน Resume ผู้สมัครงานภาษาไทยเทียบกับลักษณะงานและเกณฑ์การคัดเลือก (Criteria) อย่างเที่ยงตรง
 
-1. **ข้อมูลผู้สมัคร** — ชื่อ-สกุล, อายุ (ปีที่จบ), สถานภาพ, ที่อยู่, เบอร์ติดต่อ, อีเมล, โซเชียลมีเดีย
-2. **คะแนนรวม (0-100)** — ให้คะแนนผู้สมัครเป็นตารางสรุปคะแนนตามเกณฑ์ประเมินที่ระบุเท่านั้น พร้อมเหตุผลสั้นๆ
-
-ตอบเป็นภาษาไทย ใช้ headers และ bullet points ให้ชัดเจน ห้ามวิเคราะห์ส่วนอื่นๆ เช่น จุดเด่น จุดที่ควรพัฒนา หรือข้อแนะนำเพิ่มเติมเด็ดขาด`;
+กติกาการวิเคราะห์และการประเมินคะแนน:
+1. พิจารณาเทียบคุณสมบัติใน Resume กับเกณฑ์หลัก (Main Criteria) และเกณฑ์ย่อย (Sub-criteria) ทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%)
+2. คำนวณคะแนนตามสัดส่วนน้ำหนัก (Weight %) ของแต่ละเกณฑ์หลักอย่างเป็นระบบ
+3. ตอบกลับด้วยสรุปข้อมูลผู้สมัคร และตารางคะแนนประเมินรายหมวดในรูปแบบ Markdown ภาษาไทยที่กระชับ อ่านง่าย`;
 
 interface AnalysisResult {
     resumeName: string;
@@ -112,92 +112,43 @@ export default function ScreeningPage() {
     };
 
     const parseScoresFromMarkdown = (content: string) => {
-        const lines = content.split("\n");
+        const lines = (content || "").split("\n");
         const parsedRows: { name: string; score: number; max: number }[] = [];
         let totalScore = 0;
         let totalMax = 100;
         let hasTotalRow = false;
-        let inTable = false;
-        let inScoreSection = false;
 
         for (const line of lines) {
             const trimmed = line.trim();
-            const cleanLine = trimmed.replace(/\*\*/g, "");
+            if (!trimmed.startsWith("|")) continue;
 
-            // Detect score table structure
-            if (trimmed.startsWith("|")) {
-                inScoreSection = true;
-            }
+            const cols = trimmed.split("|").map(c => c.trim()).filter(c => c !== "");
+            if (cols.length < 2) continue;
 
-            // Detect header sections to toggle scope
-            const isScoreHeader = cleanLine.includes("คะแนนรวม") || 
-                                  cleanLine.toLowerCase().includes("scores") ||
-                                  cleanLine.includes("เกณฑ์การประเมิน");
-            if (isScoreHeader) {
-                inScoreSection = true;
+            const name = cols[0].replace(/\*\*/g, "").replace(/^[-#*:]+/g, "").trim();
+            if (!name || name.startsWith("---") || name.includes("เกณฑ์") || name.toLowerCase().includes("criterion")) {
                 continue;
             }
 
-            if (inScoreSection && (cleanLine.startsWith("#") || cleanLine.startsWith("---"))) {
-                if (cleanLine.match(/^##?\s+[^2]/) || cleanLine.includes("จุดเด่น") || cleanLine.includes("ข้อมูลผู้สมัคร")) {
-                    inScoreSection = false;
+            const scoreStr = cols[1].replace(/\*\*/g, "").trim();
+            const scoreMatch = scoreStr.match(/(\d+(?:\.\d+)?)\s*(?:[\/|\s-–—]+\s*(\d+(?:\.\d+)?))?/);
+            if (scoreMatch) {
+                const scoreVal = parseFloat(scoreMatch[1]);
+                const maxVal = scoreMatch[2] ? parseFloat(scoreMatch[2]) : 100;
+                const isTotal = name.includes("รวม") || name.includes("Total") || name.includes("สรุป");
+                if (isTotal) {
+                    totalScore = scoreVal;
+                    totalMax = maxVal;
+                    hasTotalRow = true;
+                } else {
+                    parsedRows.push({ name, score: scoreVal, max: maxVal });
                 }
             }
-
-            if (!inScoreSection) {
-                continue;
-            }
-
-            if (trimmed.startsWith("|")) {
-                inTable = true;
-                const cols = trimmed.split("|").map(c => c.trim()).filter(c => c !== "");
-                if (cols.length < 2 || cols[0].startsWith("---") || cols[0].includes("เกณฑ์")) {
-                    continue;
-                }
-                const name = cols[0].replace(/\*\*/g, "").trim();
-                const scoreStr = cols[1].replace(/\*\*/g, "").trim();
-                const scoreMatch = scoreStr.match(/^(\d+)(?:\s*[-–—/]\s*(\d+))?/);
-                if (scoreMatch) {
-                    const scoreVal = parseFloat(scoreMatch[1]);
-                    const maxVal = scoreMatch[2] ? parseFloat(scoreMatch[2]) : 100;
-                    const isTotal = name.includes("รวม") || name.includes("Total");
-                    if (isTotal) {
-                        totalScore = scoreVal;
-                        totalMax = maxVal;
-                        hasTotalRow = true;
-                    } else {
-                        parsedRows.push({ name, score: scoreVal, max: maxVal });
-                    }
-                }
-            } else {
-                const listMatch = cleanLine.match(/^(?:[-*+•]|\d+[.)])?\s*(.+?)\s*:\s*(\d+)\s*[-–—/]\s*(\d+)/);
-                if (listMatch) {
-                    const name = listMatch[1].trim();
-                    const scoreVal = parseFloat(listMatch[2]);
-                    const maxVal = parseFloat(listMatch[3]);
-                    const isTotal = name.includes("รวม") || name.includes("Total");
-                    if (isTotal) {
-                        totalScore = scoreVal;
-                        totalMax = maxVal;
-                        hasTotalRow = true;
-                    } else {
-                        parsedRows.push({ name, score: scoreVal, max: maxVal });
-                    }
-                }
-            }
-        }
-
-        let average = 0;
-        if (parsedRows.length > 0) {
-            const sumPercent = parsedRows.reduce((sum, row) => sum + (row.score / row.max) * 100, 0);
-            average = Math.round(sumPercent / parsedRows.length);
-        } else if (hasTotalRow) {
-            average = Math.round((totalScore / totalMax) * 100);
         }
 
         return {
             scores: parsedRows,
-            average,
+            average: parsedRows.length > 0 ? Math.round(parsedRows.reduce((s, r) => s + (r.score / r.max) * 100, 0) / parsedRows.length) : 0,
             total: hasTotalRow ? totalScore : null,
             max: hasTotalRow ? totalMax : null
         };
@@ -293,7 +244,7 @@ export default function ScreeningPage() {
         Object.keys(criteriaMap).forEach(key => {
             const info = criteriaMap[key];
             breakdown[info.name] = {
-                score: scores[key] !== undefined ? scores[key] : (strengths ? 0 : Math.round(info.max * 0.5)),
+                score: scores[key] !== undefined ? scores[key] : 0,
                 max: info.max
             };
         });
@@ -417,6 +368,15 @@ export default function ScreeningPage() {
                     if (!ocrRes.ok) throw new Error(`HTTP ${ocrRes.status}`);
                     const ocrData = await ocrRes.json();
                     resumeText = ocrData.text || "";
+
+                    // Optimization 1: Automatic OCR Caching (Save OCR text to DB immediately)
+                    if (resumeText) {
+                        try {
+                            await updateApplicationScreening(app.ID, app.AIScore || 0, app.AIScreening?.strengths || "", "typhoon2.5-qwen3-4b", resumeText);
+                        } catch (cacheErr) {
+                            console.warn("[OCR Cache Warning] Failed to cache OCR text in DB:", cacheErr);
+                        }
+                    }
                 } catch (ocrErr: any) {
                     console.error("[OCR Service Error]", ocrErr);
                     throw new Error(`ไม่สามารถเชื่อมต่อบริการ Typhoon AI OCR (${TYPHOON_API}/ocr) ได้: ${ocrErr.message || "Failed to fetch"}`);
@@ -441,10 +401,23 @@ export default function ScreeningPage() {
                 userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jdText}`;
             }
             if (criteriaText) {
-                const formattedCriteria = Array.isArray(criteriaText)
-                    ? criteriaText.map((c: any) => `- ${c.title} (น้ำหนัก ${c.weight}คะแนน): ` + (c.sub_criteria?.map((sc: any) => `${sc.title} (${sc.description})`).join(", ") || "")).join("\n")
-                    : criteriaText;
-                userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${formattedCriteria}`;
+                let formattedCriteria = "";
+                if (Array.isArray(criteriaText)) {
+                    formattedCriteria = criteriaText.map((c: any, cIdx: number) => {
+                        let mainStr = `📌 เกณฑ์หลัก (${cIdx + 1}): ${c.title} (น้ำหนักคะแนนเต็ม ${c.weight} คะแนน/%)`;
+                        if (c.sub_criteria && c.sub_criteria.length > 0) {
+                            const subStr = c.sub_criteria.map((sc: any, scIdx: number) => 
+                                `   ▫️ เกณฑ์ย่อย (${cIdx + 1}.${scIdx + 1}): ${sc.title} (น้ำหนักคะแนนเต็ม ${sc.weight} คะแนน/%)\n      รายละเอียดเกณฑ์ประเมิน: ${sc.description}`
+                            ).join("\n");
+                            mainStr += `\n${subStr}`;
+                        }
+                        return mainStr;
+                    }).join("\n\n");
+                } else {
+                    formattedCriteria = String(criteriaText);
+                }
+
+                userContent += `\n\n=== เกณฑ์ในการคัดเลือกและน้ำหนักคะแนน (Main & Sub-Criteria) ===\n${formattedCriteria}`;
                 
                 const listStr = Object.values(criteriaMap)
                     .map((info) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
@@ -454,13 +427,16 @@ export default function ScreeningPage() {
                     .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ] |`)
                     .join("\n");
 
-                userContent += `\n\n=== ข้อกำหนดเกณฑ์การประเมินที่ต้องแสดงในตารางคะแนน ===
-คุณต้องประเมินและให้คะแนนผู้สมัครภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ในรูปแบบตาราง Markdown ตามหัวข้อเกณฑ์เหล่านี้เท่านั้น:
+                userContent += `\n\n=== ข้อกำหนดและเกณฑ์การประเมินผู้สมัคร (HR Evaluation Standards) ===
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักและเกณฑ์ย่อยทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) แล้วประเมินคะแนนสรุปใส่ในตาราง Markdown ภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ดังนี้:
+
+เกณฑ์หลักที่จะต้องประเมินและแสดงในตาราง:
 ${listStr}
 
-แนวทางการให้คะแนน:
-- ให้ประเมินคะแนนเป็นสเกลแบบละเอียด (Granular Score) ตามระดับความสามารถหรือความเหมาะสมจริง (เช่น หากตรงเกณฑ์บางส่วน สามารถให้คะแนนระหว่างทางได้ เช่น 5, 10, 15, 20 จากคะแนนเต็ม) ไม่จำเป็นต้องประเมินแบบได้คะแนนเต็มหรือไม่ได้เลย (0 หรือ คะแนนเต็ม)
-- ให้พิจารณาและประเมินตามหลักความเป็นจริงจากข้อมูลใน Resume อย่างสมเหตุสมผล
+แนวทางการประเมินคะแนน:
+- หากคุณสมบัติ/ทักษะตรงตามเกณฑ์ย่อยระดับ "ดี" ให้คะแนนเต็ม 100% ของเกณฑ์หลักนั้น
+- หากมีทักษะใกล้เคียงหรืออยู่ในระดับ "ปานกลาง" ให้คะแนน 50% ของเกณฑ์หลักนั้น
+- หากขาดทักษะสำคัญหรืออยู่ในระดับ "แย่" ให้คะแนน 0% หรือตามความเหมาะสมจริง
 
 สำคัญที่สุด: ให้ตอบกลับในรูปแบบตารางตามเทมเพลตด้านล่างนี้เป๊ะๆ (แทนที่ [คะแนนที่ได้] และ [เหตุผลประเมินสั้นๆ] ด้วยข้อมูลจริง):
 
@@ -469,7 +445,7 @@ ${listStr}
 ${tableRowsExample}
 | **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
-ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์โดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
+ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักโดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
             }
 
             const response = await fetch(`${TYPHOON_API}/chat`, {
@@ -478,7 +454,7 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 1024,
+                    max_new_tokens: 650,
                     temperature: 0,
                 }),
             });
@@ -526,7 +502,25 @@ ${tableRowsExample}
             const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${finalScores[k]}`).join(",")}]`;
             const strengthsText = `${scoresStr}\n\n${fullText}`;
 
-            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText);
+            const breakdownDetails = Object.keys(criteriaMap).map(key => {
+                const info = criteriaMap[key];
+                return {
+                    category_key: key,
+                    category_name: info.name,
+                    score: finalScores[key] || 0,
+                    max_score: info.max,
+                    percentage: info.max > 0 ? Math.round(((finalScores[key] || 0) / info.max) * 100) : 0
+                };
+            });
+
+            const structuredJSON = JSON.stringify({
+                total_score: totalScore,
+                criteria_breakdown: breakdownDetails,
+                raw_markdown: fullText,
+                analyzed_at: new Date().toISOString()
+            });
+
+            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText, structuredJSON);
 
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
@@ -537,6 +531,7 @@ ${tableRowsExample}
                         AIScreening: {
                             skill_score: totalScore,
                             strengths: strengthsText,
+                            analysis_data: structuredJSON,
                             model_used: "typhoon2.5-qwen3-4b"
                         }
                     };
@@ -1313,13 +1308,18 @@ ${tableRowsExample}
                                                                 );
                                                             })}
                                                             {status === "ai" && (
-                                                                <span className="text-xs text-blue-500 font-bold flex items-center gap-1.5 animate-pulse">
-                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> AI กำลังวิเคราะห์...
+                                                                <span className="text-xs text-[#4169E1] font-bold flex items-center gap-1.5 animate-pulse bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 🧠 Typhoon AI กำลังวิเคราะห์คะแนน...
                                                                 </span>
                                                             )}
                                                             {status === "ocr" && (
-                                                                <span className="text-xs text-amber-500 font-bold flex items-center gap-1.5">
-                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> OCR สแกนไฟล์...
+                                                                <span className="text-xs text-amber-600 font-bold flex items-center gap-1.5 animate-pulse bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 📄 กำลังสแกนอ่านไฟล์เอกสาร (OCR)...
+                                                                </span>
+                                                            )}
+                                                            {status === "saving" && (
+                                                                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5 animate-pulse bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 💾 กำลังบันทึกผลลง Database...
                                                                 </span>
                                                             )}
                                                             {status === "idle" && (

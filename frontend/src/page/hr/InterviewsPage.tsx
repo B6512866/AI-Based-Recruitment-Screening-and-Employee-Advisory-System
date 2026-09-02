@@ -475,7 +475,7 @@ export default function InterviewsPage() {
 
                                         <button
                                             className="w-full bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-indigo-200 active:scale-95 flex items-center justify-center gap-2"
-                                            onClick={() => alert("ส่งคำเชิญเรียบร้อยแล้ว (จะเชื่อมระบบ Email ภายหลัง)")}
+                                            onClick={() => alert("ส่งคำเชิญเรียบร้อยแล้ว")}
                                         >
                                             <Send className="w-4 h-4" />
                                             ส่งคำเชิญให้ผู้สัมภาษณ์

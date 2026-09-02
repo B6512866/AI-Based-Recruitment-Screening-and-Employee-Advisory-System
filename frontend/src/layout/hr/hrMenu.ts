@@ -60,10 +60,4 @@ export const hrMenuItems: MenuItem[] = [
         icon: CalendarCheck,
         path: "/hr/interviews",
     },
-    {
-        id: "cases",
-        label: "กฎระเบียบองค์กร",
-        icon: FolderOpen,
-        path: "/hr/cases",
-    },
 ];
